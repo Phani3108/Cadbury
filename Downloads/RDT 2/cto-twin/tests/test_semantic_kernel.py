@@ -17,6 +17,11 @@ from kernel.skills.outlook_skill import OutlookSkill
 from kernel.skills.sharepoint_skill import SharePointSkill
 from kernel.skills.search_skill import SearchSkill
 
+# Import Semantic Kernel 1.34.0 specific modules
+import semantic_kernel as sk
+from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
+from semantic_kernel.connectors.memory.azure_ai_search import AzureAISearchMemoryStore
+
 
 class TestReActPlanner:
     """Tests for the ReActPlanner class"""
@@ -37,10 +42,10 @@ class TestReActPlanner:
             "AZURE_OPENAI_ENDPOINT": "https://mock-endpoint.openai.azure.com/",
             "AZURE_OPENAI_API_KEY": "mock-api-key"
         }):
-            planner = ReActPlanner()
-            # Replace the real kernel with our mock
-            planner.kernel = mock_kernel
-            return planner
+            # Patch the Kernel class to return our mock
+            with patch('semantic_kernel.Kernel', return_value=mock_kernel):
+                planner = ReActPlanner()
+                return planner
     
     def test_initialization(self, planner):
         """Test that the planner initializes correctly"""

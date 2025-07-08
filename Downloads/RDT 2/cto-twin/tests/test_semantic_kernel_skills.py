@@ -15,6 +15,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from kernel.semantic_kernel_setup import setup_kernel, register_native_skills, AzureAISearchMemory
 from tools.graph_connector import GraphConnector
 
+# Import Semantic Kernel 1.34.0 specific modules
+from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
+from semantic_kernel.connectors.memory.azure_ai_search import AzureAISearchMemoryStore
+
 
 class TestSemanticKernelSetup:
     """Tests for the Semantic Kernel setup functionality"""
@@ -52,17 +56,17 @@ class TestSemanticKernelSetup:
     @pytest.fixture
     def mock_memory_store(self):
         """Create a mock memory store"""
-        with patch('semantic_kernel.memory.azure_ai_search_memory_store.AzureAISearchMemoryStore') as mock_store:
+        with patch('semantic_kernel.connectors.memory.azure_ai_search.AzureAISearchMemoryStore') as mock_store:
             mock_instance = MagicMock()
             mock_store.return_value = mock_instance
             yield mock_instance
     
     @pytest.fixture
-    def mock_embedding_generator(self):
-        """Create a mock embedding generator"""
-        with patch('semantic_kernel.connectors.ai.open_ai.AzureTextEmbedding') as mock_embedding:
+    def mock_embedding_service(self):
+        """Create a mock embedding service"""
+        with patch('semantic_kernel.connectors.ai.open_ai.AzureTextEmbedding') as mock_service:
             mock_instance = MagicMock()
-            mock_embedding.return_value = mock_instance
+            mock_service.return_value = mock_instance
             yield mock_instance
     
     def test_setup_kernel(self, mock_env_vars, mock_kernel, mock_chat_service):

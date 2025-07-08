@@ -8,12 +8,10 @@ import logging
 import time
 from typing import Dict, List, Optional, Any, Tuple, Callable
 import semantic_kernel as sk
-from semantic_kernel.planning import Plan
-from semantic_kernel.planning.sequential_planner import SequentialPlanner
-from semantic_kernel.planning.stepwise_planner import StepwisePlanner
-from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextCompletion
-from semantic_kernel.orchestration.context_variables import ContextVariables
-from semantic_kernel.skill_definition import sk_function, sk_function_context_parameter
+# Updated imports for Semantic Kernel 1.34.0
+# StepwisePlanner is not available in SK 1.34.0, we'll implement our own planner
+from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion
+from semantic_kernel.functions.kernel_arguments import KernelArguments
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +34,6 @@ class ReActPlanner:
         self.max_tokens = max_tokens
         self.history = []
         self.kernel = None
-        self.stepwise_planner = None
-        self.sequential_planner = None
         self.registered_skills = {}
         self._initialize_kernel()
     
@@ -49,37 +45,19 @@ class ReActPlanner:
             
             # Get deployment configuration from environment variables
             chat_deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4")
-            completion_deployment = os.environ.get("AZURE_OPENAI_COMPLETION_DEPLOYMENT", "gpt-35-turbo-instruct")
             endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
             api_key = os.environ.get("AZURE_OPENAI_API_KEY", "")
             
             # Add Azure OpenAI services to the kernel
             if endpoint and api_key:
                 # Add chat completion service for main reasoning
-                self.kernel.add_chat_service(
-                    "azure_chat_completion",
-                    AzureChatCompletion(
-                        deployment_name=chat_deployment,
-                        endpoint=endpoint,
-                        api_key=api_key,
-                        api_version="2023-05-15"
-                    )
+                chat_service = AzureChatCompletion(
+                    deployment_name=chat_deployment,
+                    endpoint=endpoint,
+                    api_key=api_key,
+                    api_version="2023-05-15"
                 )
-                
-                # Add text completion service for simpler tasks
-                self.kernel.add_text_completion_service(
-                    "azure_text_completion",
-                    AzureTextCompletion(
-                        deployment_name=completion_deployment,
-                        endpoint=endpoint,
-                        api_key=api_key,
-                        api_version="2023-05-15"
-                    )
-                )
-                
-                # Create planners
-                self.sequential_planner = SequentialPlanner(self.kernel)
-                self.stepwise_planner = StepwisePlanner(self.kernel)
+                self.kernel.add_service("azure_chat_completion", chat_service)
                 
                 # Register core skills
                 self._register_core_skills()
@@ -119,24 +97,26 @@ class ReActPlanner:
                 """
                 
                 # Use the kernel to generate reasoning
-                reasoning_result = self.kernel.create_semantic_function(
+                reasoning_function = self.kernel.create_function_from_prompt(
                     prompt,
                     max_tokens=self.max_tokens,
                     temperature=0.1,
                     top_p=0.5
-                )(context)
+                )
+                arguments = KernelArguments(**context)
+                reasoning_result = reasoning_function(arguments=arguments)
                 
                 return str(reasoning_result)
             
             # Add the action function
-            @sk_function(
+            @sk.kernel_function(
                 description="Execute an action based on reasoning",
                 name="act"
             )
-            def act(context: sk.SKContext) -> str:
-                # Extract the action to take from context
-                action = context.variables.get("action", "")
-                action_input = context.variables.get("action_input", "")
+            def act(arguments: KernelArguments) -> str:
+                # Extract the action to take from arguments
+                action = arguments.get("action", "")
+                action_input = arguments.get("action_input", "")
                 
                 # Parse the action and input
                 try:
