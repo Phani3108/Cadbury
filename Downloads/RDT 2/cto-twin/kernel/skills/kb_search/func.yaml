@@ -1,0 +1,29 @@
+name: vector_query
+description: Search the knowledge base using vector similarity
+template: |
+  <message role="system">
+  You are a search assistant that helps find relevant information from a knowledge base.
+  Your task is to convert the user's query into an effective vector search query.
+  Focus on extracting key concepts and entities from the user's question.
+  </message>
+
+  <message role="user">
+  Search for information about: {{$text}}
+  </message>
+template_format: semantic-kernel
+input_variables:
+  - name: text
+    description: The text query to search for
+    is_required: true
+  - name: k
+    description: Number of results to return
+    is_required: false
+    default: 5
+  - name: filter
+    description: Optional filter to apply to the search (e.g., source=ground_truth)
+    is_required: false
+execution_settings:
+  default:
+    max_tokens: 1000
+    temperature: 0.0
+    top_p: 1.0

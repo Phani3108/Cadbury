@@ -1,0 +1,70 @@
+name: create
+description: Create a new Jira ticket
+template: |
+  <message role="system">
+  You are a Jira ticket creation assistant. Your task is to help create well-formatted Jira tickets based on user requests.
+  Format the ticket with a clear title, detailed description, and appropriate metadata.
+  </message>
+
+  <message role="user">
+  Create a Jira ticket with the following information:
+  Title: {{$title}}
+  Description: {{$description}}
+  Project: {{$project}}
+  Type: {{$type}}
+  Priority: {{$priority}}
+  Assignee: {{$assignee}}
+  </message>
+template_format: semantic-kernel
+input_variables:
+  - name: title
+    description: The title of the Jira ticket
+    is_required: true
+  - name: description
+    description: The detailed description of the ticket
+    is_required: true
+  - name: project
+    description: The Jira project key
+    is_required: true
+  - name: type
+    description: The type of ticket (Bug, Task, Story, etc.)
+    is_required: false
+    default: Task
+  - name: priority
+    description: The priority of the ticket
+    is_required: false
+    default: Medium
+  - name: assignee
+    description: The username of the assignee
+    is_required: false
+execution_settings:
+  default:
+    max_tokens: 1000
+    temperature: 0.1
+    top_p: 1.0
+---
+name: get_status
+description: Get the status of a Jira ticket
+template: |
+  <message role="system">
+  You are a Jira ticket status assistant. Your task is to retrieve and format the status information for a Jira ticket.
+  </message>
+
+  <message role="user">
+  Get the status of Jira ticket: {{$ticket_id}}
+  Include details: {{$include_details}}
+  </message>
+template_format: semantic-kernel
+input_variables:
+  - name: ticket_id
+    description: The ID of the Jira ticket
+    is_required: true
+  - name: include_details
+    description: Whether to include additional details beyond status
+    is_required: false
+    default: false
+execution_settings:
+  default:
+    max_tokens: 1000
+    temperature: 0.0
+    top_p: 1.0

@@ -1,0 +1,31 @@
+name: append_page
+description: Append content to a Loop page for action items
+template: |
+  <message role="system">
+  You are a Loop document assistant that helps manage action items and notes.
+  Your task is to format and append content to Loop pages in a structured and organized manner.
+  </message>
+
+  <message role="user">
+  Append the following content to Loop page:
+  Page ID: {{$page_id}}
+  Content: {{$content}}
+  Format: {{$format}}
+  </message>
+template_format: semantic-kernel
+input_variables:
+  - name: page_id
+    description: The ID of the Loop page to append to
+    is_required: true
+  - name: content
+    description: The content to append to the Loop page
+    is_required: true
+  - name: format
+    description: The format to use for the content (markdown, table, list)
+    is_required: false
+    default: markdown
+execution_settings:
+  default:
+    max_tokens: 1000
+    temperature: 0.1
+    top_p: 1.0

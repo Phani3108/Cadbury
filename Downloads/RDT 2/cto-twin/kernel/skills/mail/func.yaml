@@ -1,0 +1,35 @@
+name: send_to_ea
+description: Send an email to the Executive Assistant (Rukmani)
+template: |
+  <message role="system">
+  You are an email assistant that helps draft and send professional emails to the Executive Assistant.
+  Your task is to format the email content appropriately and ensure it's clear and professional.
+  </message>
+
+  <message role="user">
+  Send an email to Rukmani (EA) with the following details:
+  Subject: {{$subject}}
+  Message: {{$message}}
+  Priority: {{$priority}}
+  Attachments: {{$attachments}}
+  </message>
+template_format: semantic-kernel
+input_variables:
+  - name: subject
+    description: The subject line of the email
+    is_required: true
+  - name: message
+    description: The body content of the email
+    is_required: true
+  - name: priority
+    description: The priority level of the email (High, Normal, Low)
+    is_required: false
+    default: Normal
+  - name: attachments
+    description: Comma-separated list of attachments to include
+    is_required: false
+execution_settings:
+  default:
+    max_tokens: 1000
+    temperature: 0.2
+    top_p: 1.0

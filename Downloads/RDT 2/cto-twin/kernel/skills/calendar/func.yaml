@@ -1,0 +1,82 @@
+name: find_slot
+description: Find an available time slot in the calendar
+template: |
+  <message role="system">
+  You are a calendar assistant that helps find available time slots for meetings.
+  Your task is to analyze calendar data and suggest appropriate meeting times.
+  </message>
+
+  <message role="user">
+  Find an available time slot with the following parameters:
+  Duration: {{$duration}} minutes
+  Participants: {{$participants}}
+  Earliest date: {{$start_date}}
+  Latest date: {{$end_date}}
+  Time range: {{$time_range}}
+  </message>
+template_format: semantic-kernel
+input_variables:
+  - name: duration
+    description: The duration of the meeting in minutes
+    is_required: true
+  - name: participants
+    description: Comma-separated list of meeting participants
+    is_required: true
+  - name: start_date
+    description: The earliest possible date for the meeting (YYYY-MM-DD)
+    is_required: true
+  - name: end_date
+    description: The latest possible date for the meeting (YYYY-MM-DD)
+    is_required: false
+  - name: time_range
+    description: Preferred time range (e.g., '9:00-17:00')
+    is_required: false
+    default: "9:00-17:00"
+execution_settings:
+  default:
+    max_tokens: 1000
+    temperature: 0.1
+    top_p: 1.0
+---
+name: send_invite
+description: Send a calendar invitation
+template: |
+  <message role="system">
+  You are a calendar assistant that helps create and send meeting invitations.
+  Your task is to format meeting details into a proper calendar invitation.
+  </message>
+
+  <message role="user">
+  Send a calendar invitation with the following details:
+  Title: {{$title}}
+  Start time: {{$start_time}}
+  End time: {{$end_time}}
+  Participants: {{$participants}}
+  Location: {{$location}}
+  Description: {{$description}}
+  </message>
+template_format: semantic-kernel
+input_variables:
+  - name: title
+    description: The title of the meeting
+    is_required: true
+  - name: start_time
+    description: The start time of the meeting (YYYY-MM-DD HH:MM)
+    is_required: true
+  - name: end_time
+    description: The end time of the meeting (YYYY-MM-DD HH:MM)
+    is_required: true
+  - name: participants
+    description: Comma-separated list of meeting participants
+    is_required: true
+  - name: location
+    description: The location of the meeting (physical or virtual)
+    is_required: false
+  - name: description
+    description: The description or agenda of the meeting
+    is_required: false
+execution_settings:
+  default:
+    max_tokens: 1000
+    temperature: 0.1
+    top_p: 1.0
