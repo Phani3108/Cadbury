@@ -6,7 +6,7 @@ import os
 import semantic_kernel as sk
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
 # Updated import for SK 1.34.0
-from semantic_kernel.connectors.memory.azure_ai_search import AzureAISearchMemoryStore
+from semantic_kernel.memory.azure_ai_search_memory_store import AzureAISearchMemoryStore
 
 class AzureAISearchMemory:
     """Memory implementation using Azure AI Search"""
