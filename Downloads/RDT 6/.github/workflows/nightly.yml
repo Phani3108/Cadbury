@@ -1,0 +1,88 @@
+name: Nightly Metrics Collection
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Run at 2 AM UTC daily
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  metrics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      
+      - name: Run Azure Search smoke test
+        run: |
+          python scripts/test_azure_ingest.py
+        env:
+          MODE: prod
+          AZURE_SEARCH_ENDPOINT: ${{ secrets.AZURE_SEARCH_ENDPOINT }}
+          AZURE_SEARCH_KEY: ${{ secrets.AZURE_SEARCH_KEY }}
+          AZURE_INDEX: digital-twin-index
+      
+      - name: Run metrics collection
+        run: |
+          python scripts/nightly_metrics.py
+        env:
+          MODE: prod
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_SEARCH_ENDPOINT: ${{ secrets.AZURE_SEARCH_ENDPOINT }}
+          AZURE_SEARCH_KEY: ${{ secrets.AZURE_SEARCH_KEY }}
+          AZURE_LOG_ANALYTICS_WORKSPACE_ID: ${{ secrets.AZURE_LOG_ANALYTICS_WORKSPACE_ID }}
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          APPLICATIONINSIGHTS_CONNECTION_STRING: ${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}
+      
+      - name: Post to Teams
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const metrics = fs.readFileSync('metrics.json', 'utf8');
+            const data = JSON.parse(metrics);
+            
+            const message = {
+              "@type": "MessageCard",
+              "@context": "http://schema.org/extensions",
+              "themeColor": "0076D7",
+              "summary": "Digital Twin Nightly Metrics",
+              "sections": [{
+                "activityTitle": "Digital Twin System Metrics",
+                "facts": [
+                  {
+                    "name": "Total Queries",
+                    "value": data.total_queries
+                  },
+                  {
+                    "name": "Success Rate",
+                    "value": `${data.success_rate}%`
+                  },
+                  {
+                    "name": "Average Response Time",
+                    "value": `${data.avg_response_time}ms`
+                  },
+                  {
+                    "name": "KB Chunks",
+                    "value": data.kb_chunks
+                  }
+                ]
+              }]
+            };
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Nightly Metrics Report\n\n- Total Queries: ${data.total_queries}\n- Success Rate: ${data.success_rate}%\n- Avg Response Time: ${data.avg_response_time}ms\n- KB Chunks: ${data.kb_chunks}`
+            }); 

@@ -1,0 +1,16 @@
+<tools>
+kb_search, jira_create, jira_status, jira_status_search, calendar_find_free_slot
+</tools>
+
+Use this loop:
+
+Thought: …
+Action: tool_name[{json_args}]
+Observation: …
+
+Repeat until you have all slots required by the OUTPUT CONTRACT.
+Finish with:
+
+FinalAnswer: {populated-json}
+
+Never write FinalAnswer before gathering at least one Observation. 

@@ -1,0 +1,125 @@
+# Golden Queries for Digital Twin Testing
+# These queries represent the core use cases and expected responses
+
+queries:
+  - name: "product_strategy_general"
+    query: "What was discussed about our product strategy in recent calls?"
+    intent: "general"
+    expected_sections: ["summary", "insights", "actions", "suggestions"]
+    expected_length: "medium"
+    truth_requirements:
+      - "All claims must be attributed to transcripts"
+      - "Include specific quotes from Ramki when available"
+      - "No generic advice without context"
+    
+  - name: "ramki_technical_views"
+    query: "What does Ramki think about our current technical architecture?"
+    intent: "specific_person"
+    expected_sections: ["summary", "ramki_views", "technical_details", "recommendations"]
+    expected_length: "long"
+    truth_requirements:
+      - "Focus on Ramki's specific statements"
+      - "Include direct quotes when grammatically complete"
+      - "Provide context for technical decisions"
+    
+  - name: "action_items_followup"
+    query: "What action items were assigned to me in the last call?"
+    intent: "action_items"
+    expected_sections: ["summary", "your_actions", "priorities", "dependencies"]
+    expected_length: "medium"
+    truth_requirements:
+      - "List specific tasks with due dates"
+      - "Include priority levels"
+      - "Mention blocking dependencies"
+    
+  - name: "meeting_scheduling"
+    query: "I need to schedule a meeting with Ramki to discuss the Q2 budget"
+    intent: "meeting_scheduling"
+    expected_sections: ["acknowledgment", "office_hours", "details_collection"]
+    expected_length: "short"
+    truth_requirements:
+      - "Provide Ramki's available office hours"
+      - "Ask for meeting details (attendees, priority, duration)"
+      - "Explain priority classification (P0-P5)"
+    
+  - name: "technical_challenges"
+    query: "What are the current technical challenges we're facing?"
+    intent: "technical"
+    expected_sections: ["summary", "challenges", "current_solutions", "priority_actions"]
+    expected_length: "long"
+    truth_requirements:
+      - "List specific technical issues"
+      - "Include current mitigation strategies"
+      - "Provide timeline and resource requirements"
+    
+  - name: "insights_only"
+    query: "I want only insights from the recent discussions"
+    intent: "insights"
+    expected_sections: ["strategic_insights", "operational_insights", "technical_insights"]
+    expected_length: "medium"
+    truth_requirements:
+      - "Focus on analysis and patterns"
+      - "Avoid action items and tasks"
+      - "Provide data-driven insights when available"
+    
+  - name: "followup_elaboration"
+    query: "Can you elaborate more on the technical challenges?"
+    intent: "follow_up"
+    expected_sections: ["detailed_analysis", "specific_issues", "proposed_solutions"]
+    expected_length: "long"
+    truth_requirements:
+      - "Provide deeper technical details"
+      - "Include specific examples and metrics"
+      - "Reference previous discussion context"
+    
+  - name: "conflicting_views"
+    query: "What are the different opinions about our hiring strategy?"
+    intent: "general"
+    expected_sections: ["summary", "multiple_viewpoints", "consensus_areas", "unresolved_issues"]
+    expected_length: "medium"
+    truth_requirements:
+      - "Present conflicting views transparently"
+      - "Attribute opinions to specific speakers"
+      - "Identify areas of agreement and disagreement"
+
+response_quality_metrics:
+  truth_adherence:
+    - "All claims must be KB-grounded"
+    - "Proper attribution required"
+    - "No hallucination patterns"
+  
+  user_engagement:
+    - "Appropriate greeting and acknowledgment"
+    - "Follow-up questions included"
+    - "Response length matches query complexity"
+  
+  content_quality:
+    - "Grammatically correct sentences"
+    - "Logical flow and coherence"
+    - "No repetition or redundancy"
+    - "Meaningful insights provided"
+
+special_handling:
+  meeting_scheduling:
+    - "Always provide office hours"
+    - "Collect topic, attendees, priority, duration"
+    - "Explain priority classification system"
+    - "Trigger email to Rukmani for booking"
+  
+  action_items:
+    - "List specific tasks with assignments"
+    - "Include due dates and priorities"
+    - "Mention blocking dependencies"
+    - "Reference Jira integration when available"
+  
+  quotes:
+    - "Use only grammatically complete quotes"
+    - "Rephrase as insights when appropriate"
+    - "Attribute to specific speakers"
+    - "Remove incoherent fragments"
+
+performance_targets:
+  response_time: "< 3 seconds"
+  truth_accuracy: "> 95%"
+  user_satisfaction: "> 90%"
+  token_efficiency: "< 2000 tokens per response" 

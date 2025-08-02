@@ -1,0 +1,227 @@
+# --- DIGITAL-TWIN GOLD QUERIES ---
+- id: optum_last_discussion
+  query: "Can you tell me last discussion on Optum"
+  expect:
+    must_contain_entities: ["Optum"]
+    allowed_sources:
+      - "Meeting-2025-07-*"
+      - "Office Hours-*"
+    must_have_slots: ["summary", "insights", "actions"]
+- id: book_slot
+  query: "Schedule a call with Ramki next week about microservices"
+  expect:
+    must_call_tools: ["calendar.find_free_slot"]
+    followup_suggestions_min: 1
+- id: book_meeting
+  query: "Book a slot with Ramki about Terraform drift"
+  expect:
+    must_call_tools: ["calendar.find_free_slot"]
+- id: optum_false_claim
+  query: "Did Ramki promise 10X revenue on Optum yesterday?"
+  expect:
+    safe_fail: true
+
+# Status Queries
+- id: pixel_status
+  query: "What's the current status of Pixel project?"
+  expect:
+    must_have_slots: ["summary", "insights", "actions"]
+    must_contain_entities: ["Pixel"]
+
+- id: optum_timeline
+  query: "What's the timeline for Optum deployment?"
+  expect:
+    must_have_slots: ["summary", "insights", "actions"]
+    must_contain_entities: ["Optum"]
+
+- id: microservices_progress
+  query: "How is the microservices migration progressing?"
+  expect:
+    must_have_slots: ["summary", "insights", "discussion"]
+
+# Booking Queries
+- id: book_meeting_optum
+  query: "Schedule a meeting with Ramki about Optum blockers"
+  expect:
+    must_call_tools: ["calendar_find_free_slot"]
+    followup_suggestions_min: 1
+
+- id: book_meeting_general
+  query: "I need to discuss something with Ramki"
+  expect:
+    must_call_tools: ["calendar_find_free_slot"]
+
+# Jira Queries
+- id: create_jira_optum
+  query: "Create a Jira ticket for Optum P1 blockers"
+  expect:
+    must_call_tools: ["jira_create"]
+
+- id: jira_status_optum
+  query: "Show me Jira tickets for Optum"
+  expect:
+    must_call_tools: ["jira_status_search"]
+
+# Technical Queries
+- id: architecture_discussion
+  query: "What did Ramki say about our architecture decisions?"
+  expect:
+    must_have_slots: ["summary", "insights", "discussion"]
+
+- id: security_compliance
+  query: "What are our security compliance requirements?"
+  expect:
+    must_have_slots: ["summary", "insights", "actions"]
+
+# People Queries
+- id: team_structure
+  query: "What's the current team structure?"
+  expect:
+    must_have_slots: ["summary", "insights"]
+
+- id: ramki_mentoring
+  query: "What mentoring insights did Ramki share?"
+  expect:
+    must_have_slots: ["summary", "insights", "ramki_quote"]
+
+# Project Queries
+- id: project_risks
+  query: "What are the main risks in our projects?"
+  expect:
+    must_have_slots: ["summary", "insights", "actions"]
+
+- id: budget_discussion
+  query: "What was discussed about budget allocation?"
+  expect:
+    must_have_slots: ["summary", "insights", "discussion"]
+
+# False Claim Tests
+- id: false_revenue_claim
+  query: "Did Ramki guarantee 50% revenue increase?"
+  expect:
+    safe_fail: true
+
+- id: false_timeline_claim
+  query: "Did Ramki promise delivery by next week?"
+  expect:
+    safe_fail: true
+
+- id: false_team_claim
+  query: "Did Ramki say we're hiring 100 new developers?"
+  expect:
+    safe_fail: true
+
+# Edge Cases
+- id: empty_query
+  query: ""
+  expect:
+    safe_fail: true
+
+- id: very_long_query
+  query: "This is a very long query that goes on and on with many details about various topics including Optum project, Pixel development, microservices architecture, team structure, budget considerations, timeline planning, risk assessment, security compliance, and many other aspects that should be considered when making decisions about our technology strategy and business objectives"
+  expect:
+    must_have_slots: ["summary", "insights"]
+
+# Specific Technical Queries
+- id: api_design
+  query: "What are our API design principles?"
+  expect:
+    must_have_slots: ["summary", "insights", "discussion"]
+
+- id: database_migration
+  query: "How are we handling database migrations?"
+  expect:
+    must_have_slots: ["summary", "insights", "actions"]
+
+- id: testing_strategy
+  query: "What's our testing strategy?"
+  expect:
+    must_have_slots: ["summary", "insights", "discussion"]
+
+# Business Queries
+- id: customer_feedback
+  query: "What customer feedback have we received?"
+  expect:
+    must_have_slots: ["summary", "insights"]
+
+- id: market_analysis
+  query: "What market analysis did we discuss?"
+  expect:
+    must_have_slots: ["summary", "insights", "discussion"]
+
+# Process Queries
+- id: agile_process
+  query: "How are we implementing agile processes?"
+  expect:
+    must_have_slots: ["summary", "insights", "actions"]
+
+- id: code_review
+  query: "What's our code review process?"
+  expect:
+    must_have_slots: ["summary", "insights", "discussion"]
+
+# Performance Queries
+- id: performance_optimization
+  query: "What performance optimizations are planned?"
+  expect:
+    must_have_slots: ["summary", "insights", "actions"]
+
+- id: scalability_concerns
+  query: "What scalability concerns were raised?"
+  expect:
+    must_have_slots: ["summary", "insights", "discussion"]
+
+# Integration Queries
+- id: third_party_integration
+  query: "What third-party integrations are we using?"
+  expect:
+    must_have_slots: ["summary", "insights"]
+
+- id: api_integration
+  query: "How are we integrating with external APIs?"
+  expect:
+    must_have_slots: ["summary", "insights", "actions"]
+
+# Quality Queries
+- id: code_quality
+  query: "What are our code quality standards?"
+  expect:
+    must_have_slots: ["summary", "insights", "discussion"]
+
+- id: documentation_standards
+  query: "What documentation standards do we follow?"
+  expect:
+    must_have_slots: ["summary", "insights", "actions"]
+
+# Innovation Queries
+- id: new_technologies
+  query: "What new technologies are we exploring?"
+  expect:
+    must_have_slots: ["summary", "insights", "discussion"]
+
+- id: research_projects
+  query: "What research projects are ongoing?"
+  expect:
+    must_have_slots: ["summary", "insights"]
+
+# Compliance Queries
+- id: regulatory_compliance
+  query: "What regulatory compliance requirements do we have?"
+  expect:
+    must_have_slots: ["summary", "insights", "actions"]
+
+- id: audit_preparation
+  query: "How are we preparing for audits?"
+  expect:
+    must_have_slots: ["summary", "insights", "discussion"]
+
+# Resource Queries
+- id: resource_allocation
+  query: "How are we allocating resources?"
+  expect:
+    must_have_slots: ["summary", "insights", "actions"]
+
+- id: capacity_planning
+  query: "What's our capacity planning approach?"
+  expect:
+    must_have_slots: ["summary", "insights", "discussion"] 

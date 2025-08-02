@@ -1,0 +1,61 @@
+{
+  "source": "kb/Engineering + CTO Office/2025-05-15_Project Mississippi Checkin - Weekly (13).txt",
+  "content": "- Project Mississippi Check-in – Weekly Office Hours with Ramki Gaddipati\n- Structured Summary for Ramki Gaddipati's Digital Twin\n\n- II. Overall Context of the Conversation/Call\n\n- This weekly check-in centered on reviewing progress for Project Mississippi, primarily regarding the critical cluster deployments, deployment timelines, and major dependencies on engineering, SRE, and product teams. A significant focus was given to clarifying deadlines, risks, and the sequence of activities required to meet commitments to Optum, both for production and non-production environments. Discussion also covered process hygiene (e.g., readiness specs, JSM adoption), handling of commercial matters (specifically, Cypher commercial agreements), roles and ownership for tenant onboarding, and resolving the SoC/SAM/Infoseek thread. Participants provided updates on blockers, risk items, and called out where re-baselining may become necessary. Ramki's role was to confirm understandings, provide direction on sequencing and focus areas, and outline principles for compliance and internal tracking.\n\n- IV. Key Takeaways from the Call\n\n- Deployment Deadlines Clarified: The end-of-May completion for cluster deployments is critical, with some spillover into early June considered manageable. (Participants confirmed team-wide alignment.)\n- Saturn Cluster Blocker Identified: Saturn clusters are at risk due to delays, with specific intervention expected to bring completion within the deadline. (Marked as “red” in tracking.)\n- Tenant Onboarding a Potential Risk: Day -1 and day 0 activities cannot be run simultaneously and carry at least a three-week completion time, flagged as a major risk to subsequent timelines.\n- Access to Optum Will Be Delayed: Ramki confirmed that Optum should not be given environment access before end of July, even if earlier targets are met. (“You’re not giving them access before end of July.”)\n- Strict Internal Tracking and Rebaselining: Ramki emphasized maintaining rigour on internal hygiene (fastpec) and delaying re-baselining until after primary deployments are finished to avoid unnecessary replanning.\n- Jira Service Management Adoption: JSM is being set up as the single channel to track deployments and activities by production zone readiness.\n- Commercials and Product Integration: Commercial closure for Cypher suite is ongoing, with technical integrations progressing; all parties are to adhere strictly to signed contracts and documented agreements.\n\n- V. Ramki's Insights\n\n1. On SoC/SAM/Infoseek and Internal Narrative:\n- Ramki demonstrated that nuances exist in stakeholder expectations around SoC/SAM requirements. While consensus externally appears elusive, he directed that further discussion happen offline, urging caution and clarity on internal vs. external narratives, especially around certification compliance. He consistently asserted the importance of maintaining stance based on what has been agreed and signed upon, refusing to chase ambiguous or shifting external requirements.\n\n2. On Clarity of Deployment Focus and Hygiene:\n- Ramki approved the focus shift: cluster deployments should take precedence over completing all fastpec readiness details, but insisted that this relaxation is temporary and exceptional—categorically describing such hygiene as non-negotiable and “critical,” even if treated as an exception for now. His tone was direct, with an expectation for future strictness.\n\n3. On Timeline Commitments and Risk Management:\n- He persistently pressed for precise understanding on when environments would be handed over to Optum, challenging assumptions on UAT and prod zone timelines. Ramki questioned perceived internal commitments, seeking written plans as evidence and insisting on transparency whenever risks emerge, such as the “month off” in the deployment schedule, and directly calling for red status where merited.\n\n4. On Baselining and Planning Discipline:\n- Ramki was clear that no rebaselining should be discussed until key deployment milestones are completed, to avoid constant schedule changes due to upstream slippages. He framed optimistic internal targets as necessary but realistic handover dates as fundamental (“you should not plan for that,” “at least four weeks from cluster deployment”).\n\n5. On Ownership of Onboarding and Using Available Time:\n- He suggested maximizing the current window by having the tenant onboarding team practice all setup steps in the showroom, essentially stress-testing the process and automation to expedite future, real deployments. Ramki’s instruction combined a pragmatic approach with an expectation of hands-on rehearsal and learning.\n\n6. On Compliance, Revalidation, and Contractual Adherence:\n- When asked about discrepancies in service level agreements or contract wording, Ramki insisted on strict adherence to “what is written,” with no space for speculative questioning—any exceptions or issues should be escalated directly to him if they potentially hinder progress.\n\n- VI. Ramki's Suggested Action Items\n\n1. Task: Conduct internal side discussion to clarify and prepare a response to the SoC/SAM thread (especially regarding Infoseek and external communication).\n- Assigned To: Rafi Mohammed Shaik and relevant Infoseek leads\n- Ramki's Instructions on Layout/Methodology: Prepare a consolidated response, maintain internal consensus, present only what is agreed upon; separate offline as needed.\n- Timeline Mentioned by Ramki: As soon as possible, no explicit deadline but implied urgency.\n\n2. Task: Rehearse tenant onboarding configuration steps in showroom environment before clusters are fully ready.\n- Assigned To: Pankaj Sharma and onboarding leads\n- Ramki's Instructions on Layout/Methodology: Practice end-to-end setup, create as many tenants and script configurations as feasible, document any manual steps needed.\n- Timeline Mentioned by Ramki: During the window before zone readiness.\n\n3. Task: Strict internal tracking of deployment progress, risk items, and maintain red status visibility when required.\n- Assigned To: Rafi Mohammed Shaik, Vinod Lal, SRE team\n- Ramki's Instructions on Layout/Methodology: Present risks clearly, “call out red,” delay rebaselining discussions until actual deployment completion, avoid false optimism in reporting.\n- Timeline Mentioned by Ramki: Ongoing, reviewed daily/weekly.\n\n4. Task: Adhere to written agreements/MSA strictly when reviewing SEV levels and SLAs; escalate only if material risk arises.\n- Assigned To: Rafi Mohammed Shaik (contract review/validation)\n- Ramki's Instructions on Layout/Methodology: Accept the written word as the truth; escalate to Ramki if a genuine issue with contractual obligations arises.\n- Timeline Mentioned by Ramki: Immediate validation cycle.\n\n5. Task: Monitor and help facilitate closure of Cypher suite commercial discussion, ensuring all technical and financial arrangements align with customer expectations.\n- Assigned To: Ramesh Javvaji (and business/commercial leads as appropriate)\n- Ramki's Instructions on Layout/Methodology: Remain responsive, persist in providing technical clarifications/POCs, but treat commercial agreement as prerequisite for “truth” in partnership.\n- Timeline Mentioned by Ramki: Track until signed; no explicit date, but ongoing.\n\n- VII. Jira Ticket\n\n- Scope: No distinct Jira ticket is clearly enabled from Ramki’s action items. The action items are either strategic (offline discussions, rehearsal in showroom, contract review) or are ongoing operational tracking (e.g., daily progress monitoring), which typically fall outside the immediate scope of Jira-based ticketing meant for discrete engineering tasks.\n- Assignee: Not applicable / Multiple team leads as above.\n- Justification: The activities directed by Ramki are not granular engineering items but revolve around program management, process rehearsal, and contract adherence—areas usually tracked via program management tools, not Jira tickets.\n\n- VIII. Follow Up Questions/Suggestions\n\n1. Confirm Timeline Dependencies: After initial cluster deployments are complete, validate actual time required for full tenant setup and onboarding, to allow for realistic downstream planning and potential rebaselining.\n\n2. Ensure Showroom Practice Learnings are Captured: Recommend gathering feedback post-practice runs in the showroom, to document and optimize onboarding scripts or workflows ahead of full scale go-live.\n\n3. Reiterate the Use of JSM: As JSM adoption proceeds, clarify to all team members where/when to update progress, so information is current and accessible at all times.\n\n4. Prepare for Commercial Closure in Cypher: Ensure that, once commercial agreement terms are signed, there is a quick operational handoff to technical teams for immediate execution, minimizing any time lost in transition.\n\n5. Plan a Clear Communication to Optum: Upon finalization of timelines for prod/non-prod and UAT environments, draft a clear external communication plan reflecting confirmed commitments, aligned with internal understanding.\n\n- End of analysis. All sections completed as per specified structure and strict focus on Ramki Gaddipati’s statements, insights, understandings, and instructions.",
+  "metadata": {
+    "call_date": "May 15, 2025, 12:29PM",
+    "attendees": [
+      "Ramki Gaddipati",
+      "Rafi Mohammed Shaik",
+      "Aravind Reddy Nagireddy",
+      "Sulbha Srivastava",
+      "Praveen Darshanam",
+      "Santhosh Nagarajan",
+      "Christ Benhur Bethapudi",
+      "Vinod Lal",
+      "Tharun Jagadeesh",
+      "Kirit Parmar",
+      "Sagar Babar",
+      "Shashidhar Soppin",
+      "Ramesh Javvaji",
+      "(plus references to Kamlesh",
+      "Chandra",
+      "Abhishek Bharadwaj",
+      "Pankaj Sharma",
+      "Shulbha Pagar",
+      "Abhilash",
+      "and others indirectly involved)"
+    ],
+    "topics": [],
+    "tenant_onboarding": "day -1 and day 0 activities",
+    "intent": "technical_guidance",
+    "entities": [
+      "Project Mississippi, deployment deadlines, cluster deployment, tenant onboarding, day -1 activities, day 0 activities, SRE, fastpec readiness, infoseek, SoC/SAM, Optum delivery, commercial discussions, Cypher suite, JSM (Jira Service Management), risk mitigation, re-baselining, internal hygiene, production zone, non-production zone, UAT, timeline commitments, configuration testing, validation processes."
+    ]
+  },
+  "date": "2025-05-15",
+  "title": "2025-05-15_Project Mississippi Checkin - Weekly (13)",
+  "attendees": [
+    "Ramki Gaddipati",
+    "Rafi Mohammed Shaik",
+    "Aravind Reddy Nagireddy",
+    "Sulbha Srivastava",
+    "Praveen Darshanam",
+    "Santhosh Nagarajan",
+    "Christ Benhur Bethapudi",
+    "Vinod Lal",
+    "Tharun Jagadeesh",
+    "Kirit Parmar",
+    "Sagar Babar",
+    "Shashidhar Soppin",
+    "Ramesh Javvaji",
+    "(plus references to Kamlesh",
+    "Chandra",
+    "Abhishek Bharadwaj",
+    "Pankaj Sharma",
+    "Shulbha Pagar",
+    "Abhilash",
+    "and others indirectly involved)"
+  ],
+  "tags": [],
+  "contexts": []
+}

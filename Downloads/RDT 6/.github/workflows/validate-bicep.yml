@@ -1,0 +1,119 @@
+name: Validate Bicep Template
+
+on:
+  push:
+    paths:
+      - 'infra/**'
+  pull_request:
+    paths:
+      - 'infra/**'
+  workflow_dispatch:
+
+jobs:
+  validate-bicep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Azure CLI
+        uses: azure/setup-azure-cli@v3
+        with:
+          version: latest
+      
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Validate Bicep Template
+        run: |
+          echo "🔍 Validating Bicep template syntax..."
+          
+          # Check if Bicep file exists
+          if [ ! -f "infra/aca.bicep" ]; then
+            echo "❌ Bicep template not found: infra/aca.bicep"
+            exit 1
+          fi
+          
+          # Validate Bicep syntax
+          az bicep build --file infra/aca.bicep
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Bicep template syntax is valid"
+          else
+            echo "❌ Bicep template has syntax errors"
+            exit 1
+          fi
+      
+      - name: What-if Deployment Check
+        run: |
+          echo "🔍 Running what-if deployment check..."
+          
+          # Create a mock resource group for testing
+          az group create --name test-dt-rg --location eastus --output none
+          
+          # Run what-if deployment
+          az deployment group what-if \
+            --resource-group test-dt-rg \
+            --template-file infra/aca.bicep \
+            --parameters \
+              environment=test \
+              location=eastus \
+              openaiApiKey=test-key \
+              searchEndpoint=https://test.search.windows.net \
+              searchKey=test-key \
+              appInsightsConnectionString=test-connection-string \
+            --no-preview \
+            --output none
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Bicep template what-if check passed"
+          else
+            echo "❌ Bicep template what-if check failed"
+            exit 1
+          fi
+          
+          # Clean up test resource group
+          az group delete --name test-dt-rg --yes --output none
+      
+      - name: Validate Parameters
+        run: |
+          echo "🔍 Validating Bicep parameters..."
+          
+          # Check required parameters
+          required_params=(
+            "environment"
+            "location"
+            "openaiApiKey"
+            "searchEndpoint"
+            "searchKey"
+          )
+          
+          for param in "${required_params[@]}"; do
+            if ! grep -q "param $param" infra/aca.bicep; then
+              echo "❌ Missing required parameter: $param"
+              exit 1
+            fi
+          done
+          
+          echo "✅ All required parameters present"
+      
+      - name: Check Resource Types
+        run: |
+          echo "🔍 Validating Azure resource types..."
+          
+          # Check for valid resource types
+          valid_resources=(
+            "Microsoft.OperationalInsights/workspaces"
+            "Microsoft.ContainerRegistry/registries"
+            "Microsoft.App/managedEnvironments"
+            "Microsoft.App/containerApps"
+          )
+          
+          for resource in "${valid_resources[@]}"; do
+            if ! grep -q "$resource" infra/aca.bicep; then
+              echo "⚠️  Resource type not found: $resource"
+            fi
+          done
+          
+          echo "✅ Resource type validation completed" 

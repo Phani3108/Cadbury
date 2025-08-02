@@ -1,0 +1,62 @@
+{
+  "source": "kb/Engineering + CTO Office/2025-01-20_Project Mississippi Checkin - Weekly (1).txt",
+  "content": "- Ramki Gaddipati Office Hours – Digital Twin Structured Summary\n\n- II. Overall Context of the Conversation/Call\n\n- The meeting was a project planning and status alignment session centered on Zeta’s \"Project Mississippi\" and related major deliverables for the Optum client. Discussions began with AWS contract status, volume discount negotiations, and upcoming stakeholder meetings. Integration touchpoint identification and validation processes were reviewed, clarifying responsibilities between customer success and technical owners. Technical debates focused heavily on AWS account setups, the necessity of codified, automation-driven network and DNS architectures, and the segregation of project versus platform-level tasks (specifically, Velos platform scope).\n\n- Ramki emphasized methodology, urging that all configuration be automated (no manual intervention) and codified into version control, demarcating feature ownership and closing loopholes around recurring architectural questions. The group dissected the detailed Mississippi WBS, assigning accountability and removing redundancy, then moved to discuss SaaS deployment, tenant provisioning models, and audit/compliance planning. Finally, process documentation, operations manuals, and team formation requirements were established, with open questions resolved regarding delivery location and further legal clarifications.\n\n- IV. Key Takeaways from the Call\n\n- AWS EDP Discussions to Progress with Updated Volume Inputs: Upcoming negotiation with AWS/Bpoi scheduled for February; input needed on volume commitments and discount calculation.\n- Integration Touchpoints Source Standardized: Ownership clarified; only specific approved teams (not ad-hoc stakeholders) to create and validate integration lists and provide formal sign-off.\n- MSA Amendment Required alongside SoW: Existing contract stipulations necessitate both updated statement of work and formal MSA amendment for AWS deployment changes.\n- Network/DNS Architecture: Codification and Automation Mandated: Ramki strictly instructed that all domain/topology/network management for Olympus and related projects must be executed through code (Git/crossplane/terraform), with all manual AWS access phased out.\n- Prod-First Deployment Approach Endorsed: Clear direction to prioritize production setup before UAT; early “March” target deemed unrealistic; project timelines to flow from implementation team.\n- Project WBS Restructured and Clarity on Ownership: Redundancies merged, phase scoping clarified, and responsibility for tenant provisioning/subscription and verification broken out between manufacturing/product and customer success teams.\n- Compliance and Operational Documentation Requirements Affirmed: Security baselining, operations manuals, audit trails, and architectural documents are non-negotiable deliverables for every zone/environment.\n\n- V. Ramki's Insights\n\n1. On Ownership, Automation, and Technical Rigor:\n- Ramki insisted on clear, unambiguous ownership for all technical integration lists and system decisions. He was emphatic that no manual intervention is to occur in network/DNS setup—articulating strict adherence to “all configurations must be in code and tracked in Git.” Ramki showed visible frustration with recurring, elementary DNS/domain name queries, emphasizing long-standing internal guidance and demanding independent, expert judgment from key technical leads. Ramki’s tone repeatedly underscored accountability, and he moved to close out open debates with finality.\n\n2. On AWS Account, Contracts, and Legal Formalities:\n- He guided the team meticulously on contract amendments, identifying that both SOW and MSA needed changes to reflect environment and deployment obligations. He clarified historical context (prior agreements with Optum) and was patient but firm in preventing ambiguous or partial contract handling. He instructed the team to consult legal and prepare clear amendments for review.\n\n3. On Project Timeline Setting and Customer Expectations:\n- Ramki expressed certainty that customer-proposed timelines were not feasible without input from implementation teams. He rationalized the prod-first approach, explaining certification dependencies, resource/logistics sequencing, and clarifying that expectations should reflect workload realities, not external management pressure. He also reaffirmed that no unvetted commitments should be transmitted to customers.\n\n4. On SaaS Module Inventory and Subscription Workflows:\n- Ramki differentiated between subscription and tenant provisioning, explaining nuances based on product type and team enablement. He mandated that product/customer success must own deployment/subscription contracts, and if gaps exist, manufacturing teams must assume responsibility. He highlighted that some SaaS products do not yet have proven, automated subscription logic and that any assumptions about customer team capabilities must be validated.\n\n5. On Security, Documentation, and Handover:\n- For compliance and security, Ramki was precise—benchmarking, baselining, alignment with PCI/SOC-2/audit requirements, and robust documentation (operations manual, enterprise architecture) are required. He directed the team to repeat the rigor and completeness as was done for high-stakes deployments (e.g., HDFC), with all handover steps properly documented before moving to support/operations.\n\n6. On Scope Control Between Platform and Project:\n- Ramki made a clear distinction between platform-wide architectural or automation changes (i.e., in Velos) and what should be in-scope for Project Mississippi, directing the team to move certain architectural/automation tickets out of the project WBS and into platform backlogs, to prevent focus loss and unnecessary complexity within the customer delivery stream.\n\n- VI. Ramki's Suggested Action Items\n\n1. Task: Provide updated, current run-rate AWS volume information for EDP negotiations.\n- Assigned To: Shaik Mohammed Rafi\n- Ramki's Instructions on Layout/Methodology: Use only present volume numbers, ignore Optum future volumes for now; ensure numbers align with current commitments for accurate discount discussions.\n- Timeline Mentioned by Ramki: Before February AWS/Bpoi meeting.\n\n2. Task: Validate and formalize integration touchpoint list; ensure correct sourcing and sign-off.\n- Assigned To: Bruno and Customer Success Team\n- Ramki's Instructions on Layout/Methodology: List to be strictly provided/validated by customer success (not arbitrary stakeholders); ensure only authorized team provides sign-off.\n- Timeline Mentioned by Ramki: As soon as possible (implied urgency ahead of next client engagements).\n\n3. Task: Initiate POC for multi-factor authentication (MFA) on AWS root accounts using dummy/test accounts, with no impact on production.\n- Assigned To: Jagad Ravindran and related team members\n- Ramki's Instructions on Layout/Methodology: Use dummy/free accounts; avoid involving production accounts; clarify that POC is isolated and intended as learning, not deliverable.\n- Timeline Mentioned by Ramki: Starting today (immediate action).\n\n4. Task: Prepare and review MSA amendment alongside SoW for deployment changes.\n- Assigned To: Shaik Mohammed Rafi (with legal team)\n- Ramki's Instructions on Layout/Methodology: Consult legal; directly address explicit deployment environment contract language in amendment; ensure no ambiguity in MSA/SoW coverages.\n- Timeline Mentioned by Ramki: “Quickly” (immediate follow-up).\n\n5. Task: Codify all network/DNS architecture and automation (for Olympus/Velos)—move all manual configuration out of project scope.\n- Assigned To: Ketan and Atma (Velos Team)\n- Ramki's Instructions on Layout/Methodology: All architectures/vanity domains and scripts for infrastructure must be codified in code repositories (terraform/crossplane); no manual AWS interaction permitted; timeline ingress into Velos project not Mississippi.\n- Timeline Mentioned by Ramki: Incorporated into Velos platform timeline, not current project.\n\n6. Task: Refactor Project Mississippi WBS, merge redundancies, clarify scope and responsibility (e.g., tenant provisioning, SaaS onboarding), and align on what to phase for deployment.\n- Assigned To: Ramesh Javvaji, Shashidhar Soppin, Vinod Lal\n- Ramki's Instructions on Layout/Methodology: Combine overlapping WBS items, phase SaaS modules appropriately, align SaaS product responsibility, codify operations documentation and validation for each item.\n- Timeline Mentioned by Ramki: Next WBS iteration (prior to final project plan circulation and external commitments).\n\n- VII. Jira Ticket\n\nTicket 1:\n- Scope: Complete codification and automation of all DNS/network topology for Olympus/Velos platform, moving all manual architecture work to code (Terraform, Crossplane), and defining standard process for zone/domain setup.\n- Assignee: Ketan and Atma (Velos Team)\n- Justification: Ramki explicitly moved this workstream out of Project Mississippi and into Velos; he made this a foundation-level requirement before allowing any production environment configuration to proceed. No action in Mississippi until this is codified in Velos.\n\nTicket 2:\n- Scope: Refactor and finalize Project Mississippi WBS, merging overlapping items, and confirming module responsibilities and gating handovers.\n- Assignee: Ramesh Javvaji, Shashidhar Soppin, Vinod Lal\n- Justification: Direct action item from Ramki to eliminate scope ambiguity and ensure the project plan is actionable and review-ready. This impacts delivery certainty and team accountability.\n\n[No tickets for routine negotiation actions, legal clarifications, or AWS POC work as those are not development tasks and require business/legal communications or already-adopted process workflows.]\n\n- VIII. Follow Up Questions/Suggestions\n\n1. Confirm Legal Amendment Drafts: Ensure MSA/SoW amendment drafts are circulated to Ramki and legal for review before engaging Optum.\n2. Validate WBS Changes: After WBS refactor, circulate to all module owners for input to ensure no scope omissions and unified terminology.\n3. Track Platform Automation Progress: Periodically update Ramki on Velos DNS/network codification status to prevent future project interlocks.\n4. SaaS Subscription Responsibility: Clarify and document, per SaaS module, the precise owner for onboarding and subscription tasks—resolve gray areas immediately to avoid delays at deployment.\n5. Produce Sample Operational Docs Early: Share initial drafts of operations manuals and security/audit plans to Ramki for feedback prior to full documentation effort.",
+  "metadata": {
+    "call_date": "January 20, 2025, 11:51AM",
+    "attendees": [
+      "Ramki Gaddipati",
+      "Shaik Mohammed Rafi",
+      "Shashidhar Soppin",
+      "Ramesh Javvaji",
+      "Vinod Lal",
+      "Ketankumar Patel",
+      "L Augustin",
+      "Ashish Patel",
+      "Anand",
+      "Devashi",
+      "Bruno",
+      "Ketan",
+      "Atma",
+      "Gary",
+      "Naren",
+      "Dinesh",
+      "Narendra",
+      "Vivekanand",
+      "Nikhil Mangal",
+      "Prabhakar",
+      "various customer success team references"
+    ],
+    "topics": [],
+    "intent": "technical_guidance",
+    "entities": [
+      "AWS EDP, contract amendment, SOW/MSA, Optum, Project Mississippi, integration validation, network architecture, DNS, FQDN, tenant provisioning, SaaS onboarding, audit/compliance, security baseline, automation, version control, project timelines, operational documentation, team responsibility, deployment planning"
+    ]
+  },
+  "date": "2025-01-20",
+  "title": "2025-01-20_Project Mississippi Checkin - Weekly (1)",
+  "attendees": [
+    "Ramki Gaddipati",
+    "Shaik Mohammed Rafi",
+    "Shashidhar Soppin",
+    "Ramesh Javvaji",
+    "Vinod Lal",
+    "Ketankumar Patel",
+    "L Augustin",
+    "Ashish Patel",
+    "Anand",
+    "Devashi",
+    "Bruno",
+    "Ketan",
+    "Atma",
+    "Gary",
+    "Naren",
+    "Dinesh",
+    "Narendra",
+    "Vivekanand",
+    "Nikhil Mangal",
+    "Prabhakar",
+    "various customer success team references"
+  ],
+  "tags": [],
+  "contexts": []
+}

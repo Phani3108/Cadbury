@@ -1,0 +1,3 @@
+timestamp,operation,model,total_tokens,cost_usd,prompt_hash,duration_ms,result_code
+2025-08-01T10:00:00Z,planner_stage,MODEL_GPT35,1500,0.003,abc123def456,2500,200
+2025-08-01T11:00:00Z,verifier_stage,MODEL_GPT35,800,0.0016,def456ghi789,1200,200

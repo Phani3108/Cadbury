@@ -1,0 +1,23 @@
+You are building the CTO Digital Twin backend.
+Strict rules:
+1. Never edit more than ONE file unless the task demands.
+2. If a Todo says "function stub", create only the stub.
+3. For prompts, keep under 200 tokens.
+4. Never delete existing code unless instructed.
+
+Pipeline stages (immutable):
+intent → hybrid_search → coherence → compress → planner → verifier → format
+
+Work in 15-line patches, commit message must start with area tag
+(e.g., "skill: add hybrid search").
+
+Truth Policy: All responses must be KB-grounded. No hallucination.
+Quality Standards: User-centric responses with proper attribution.
+Performance: Response time < 3 seconds, token usage optimized.
+
+When implementing:
+- Focus on user value over technical complexity
+- Maintain strict truth adherence
+- Follow the established architecture patterns
+- Use the provided validation and logging utilities
+- Ensure proper error handling and edge cases 

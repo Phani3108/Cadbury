@@ -1,0 +1,78 @@
+name: cost-guard
+on: [pull_request]
+jobs:
+  cost:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Calculate token usage
+        run: |
+          # Count OpenAI API calls
+          OPENAI_CALLS=$(grep -R --include=*.py -o 'openai\.ChatCompletion' -n | wc -l)
+          ANTHROPIC_CALLS=$(grep -R --include=*.py -o 'anthropic\.Anthropic' -n | wc -l)
+          TOTAL_CALLS=$((OPENAI_CALLS + ANTHROPIC_CALLS))
+          
+          echo "OpenAI calls: $OPENAI_CALLS"
+          echo "Anthropic calls: $ANTHROPIC_CALLS"
+          echo "Total LLM calls: $TOTAL_CALLS"
+          
+          # Check for excessive token usage (tightened for GPT-3.5)
+          if [ $TOTAL_CALLS -gt 80 ]; then
+             echo "❌ Token call count too high: $TOTAL_CALLS"
+             echo "Please optimize to reduce LLM API calls"
+             exit 1
+          fi
+          
+          # Check repository token count
+          python scripts/token_cost.py
+          if [ $? -ne 0 ]; then
+             echo "❌ Repository token count exceeds limit"
+             exit 1
+          fi
+          
+          # Check for large context windows
+          LARGE_CONTEXTS=$(grep -R --include=*.py -o 'max_tokens.*[5-9][0-9][0-9][0-9]' -n | wc -l)
+          if [ $LARGE_CONTEXTS -gt 0 ]; then
+             echo "⚠️  Found $LARGE_CONTEXTS instances of large context windows"
+             echo "Consider using smaller max_tokens for cost optimization"
+          fi
+          
+          echo "✅ Cost guard passed"
+      
+      - name: Check for expensive models
+        run: |
+          # Check for GPT-4 usage
+          GPT4_USAGE=$(grep -R --include=*.py -o 'gpt-4' -n | wc -l)
+          if [ $GPT4_USAGE -gt 0 ]; then
+             echo "⚠️  Found $GPT4_USAGE instances of GPT-4 usage"
+             echo "Consider using GPT-3.5-turbo for non-critical tasks"
+          fi
+          
+          # Check for expensive model usage
+          GPT4_USAGE=$(grep -R --include=*.py -o 'gpt-4' -n | wc -l)
+          if [ $GPT4_USAGE -gt 20 ]; then
+             echo "⚠️  Found $GPT4_USAGE instances of GPT-4 usage"
+             echo "Consider using GPT-3.5-turbo for non-critical tasks"
+          fi
+      
+      - name: Validate prompt efficiency
+        run: |
+          # Check for long prompts
+          LONG_PROMPTS=$(find . -name "*.txt" -exec grep -l ".\{500,\}" {} \; | wc -l)
+          if [ $LONG_PROMPTS -gt 0 ]; then
+             echo "⚠️  Found $LONG_PROMPTS prompt files with long content"
+             echo "Consider breaking down large prompts for better efficiency"
+          fi
+          
+          # Check for redundant API calls
+          REDUNDANT_CALLS=$(grep -R --include=*.py -o 'openai\.ChatCompletion.*create' -n | wc -l)
+          if [ $REDUNDANT_CALLS -gt 50 ]; then
+             echo "⚠️  Found $REDUNDANT_CALLS potential redundant API calls"
+             echo "Consider implementing caching or batching"
+          fi 
