@@ -46,6 +46,27 @@ async def chat(request: QueryRequest, user: Dict[str, Any] = Depends(get_current
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/chat/dev", response_model=QueryResponse)
+async def chat_dev(request: QueryRequest):
+    """Development endpoint that bypasses authentication."""
+    try:
+        # Create a simple user context for development
+        user_ctx = type('UserContext', (), {
+            'user_id': 'dev_user',
+            'session_id': request.session_id or 'dev_session'
+        })()
+        
+        # Run the pipeline
+        response = await run_pipeline(request.query, user_ctx)
+        
+        return QueryResponse(
+            response=response,
+            model_used="digital_twin",
+            processing_time=0.0
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
@@ -62,8 +83,42 @@ async def get_config():
     }
 
 @app.post("/stream")
-async def stream_chat(request: QueryRequest):
+async def stream_chat(request: QueryRequest, user: Dict[str, Any] = Depends(get_current_user)):
     """Stream chat response with Server-Sent Events and verification."""
+    
+    async def generate_stream():
+        try:
+            # Create user context
+            user_ctx = type('UserContext', (), {
+                'user_id': request.user_id,
+                'session_id': request.session_id
+            })()
+            
+            # Use SSE router with verification
+            async for message in stream_with_verification(request.query, user_ctx):
+                yield message
+                
+        except Exception as e:
+            error = {
+                'type': 'error',
+                'message': str(e),
+                'query_id': f"query_{int(time.time())}"
+            }
+            yield f"data: {json.dumps(error)}\n\n"
+    
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Content-Type": "text/event-stream"
+        }
+    )
+
+@app.post("/stream/dev")
+async def stream_chat_dev(request: QueryRequest):
+    """Development stream endpoint that bypasses authentication."""
     
     async def generate_stream():
         try:

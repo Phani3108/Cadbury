@@ -109,7 +109,7 @@ export default {
     },
     
     async streamResponse(query) {
-      const response = await fetch(`${this.apiBaseUrl}/stream`, {
+      const response = await fetch(`${this.apiBaseUrl}/stream/dev`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

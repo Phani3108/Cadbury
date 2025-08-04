@@ -86,7 +86,7 @@ class DigitalTwinPipeline:
             context = await self._formatter_stage(context)
             
             return {
-                "response": context.final_response or "Buddy, I'm having trouble processing that right now. Can you try rephrasing your question?",
+                "response": context.formatted_response or context.final_response or "Buddy, I'm having trouble processing that right now. Can you try rephrasing your question?",
                 "metadata": context.metadata or {},
                 "success": True
             }

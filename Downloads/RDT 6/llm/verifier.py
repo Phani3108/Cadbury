@@ -4,6 +4,11 @@ from digital_twin.utils.config import openai_kwargs, get_model_key
 PROMPT = open("llm/prompts/verifier.txt").read()
 
 async def check(draft: dict, chunks: list) -> dict:
+    # Check if we're in development mode and no API key is available
+    if os.getenv("MODE") == "dev" and not os.getenv("OPENAI_API_KEY"):
+        print("⚠️  Development mode: Using mock verification (no OpenAI API key)")
+        return {"valid": True, "reason": "development-mode"}
+    
     short_snips = [
         {"id": c.chunk_id, "text": c.text[:400], "age_days": getattr(c, 'age_days', 0)}
         for c in chunks[:12]
