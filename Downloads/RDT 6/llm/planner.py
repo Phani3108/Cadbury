@@ -2,7 +2,7 @@ import json
 import re
 import openai
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from digital_twin.utils.config import openai_kwargs, get_model_key
 from digital_twin.utils.logger import log_prompt_and_tokens
 from skills._mock_mode import calendar_find_free_slot, jira_create, jira_status, jira_status_search
@@ -82,7 +82,7 @@ Stream Thoughts/Actions until 'FinalAnswer'. Return parsed JSON.
 
 PROMPT = open("llm/prompts/planner.txt").read()
 
-async def react(model_key: str, query: str, context: str, search_results: List[Any]) -> Dict[str, Any]:
+async def react(model_key: str, query: str, context: str, search_results: List[Any], conversation_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     ReAct planner for generating structured responses.
     
@@ -91,70 +91,69 @@ async def react(model_key: str, query: str, context: str, search_results: List[A
         query: User query
         context: Compressed context
         search_results: Search results
+        conversation_context: Optional conversation context for follow-up handling
         
     Returns:
         Structured JSON response
     """
     try:
-        # Check if we're in development mode and no API key is available
-        if os.getenv("MODE") == "dev" and not os.getenv("OPENAI_API_KEY"):
-            print("⚠️  Development mode: Using mock response (no OpenAI API key)")
-            return _generate_mock_response(query, search_results)
+        # Check if OpenAI API key is available
+        if not os.getenv("OPENAI_API_KEY"):
+            print("⚠️  No OpenAI API key available: Using mock response")
+            return _generate_mock_response(query, search_results, conversation_context)
         
-        # Prepare context from search results
-        context_text = "\n\n".join([
-            f"Source: {chunk.source_id}\n{chunk.text}"
-            for chunk in search_results[:5]  # Limit to top 5 results
-        ])
+        # Get conversation context
+        conv_context = conversation_context or {}
+        previous_queries = conv_context.get("previous_queries", [])
+        previous_responses = conv_context.get("previous_responses", [])
         
-        # Create user message
-        user_msg = PROMPT.replace("{QUERY}", query)\
-                         .replace("{CONTEXT}", context_text)
+        # Check if this is a follow-up question
+        is_follow_up = False
+        follow_up_indicators = ["what about", "tell me more", "and", "also", "additionally", "furthermore", "moreover", "specifically", "in detail", "elaborate", "what else", "anything else"]
+        is_follow_up = any(indicator in query.lower() for indicator in follow_up_indicators)
+        
+        # Enhance query with context for follow-ups
+        enhanced_query = query
+        if is_follow_up and previous_queries:
+            last_query = previous_queries[-1]
+            enhanced_query = f"Follow-up to '{last_query}': {query}"
+        
+        # Create system prompt with conversation context
+        system_prompt = PROMPT
+        if is_follow_up and previous_responses:
+            last_response = previous_responses[-1]
+            system_prompt += f"\n\nPrevious response context: {last_response[:500]}..."
+        
+        # Prepare messages
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Query: {enhanced_query}\nContext: {context}"}
+        ]
+        
+        # Add conversation history if available
+        if len(previous_queries) > 0:
+            conversation_history = "\n".join([
+                f"Q: {q}\nA: {r[:200]}..." 
+                for q, r in zip(previous_queries[-2:], previous_responses[-2:])
+            ])
+            messages.insert(1, {"role": "system", "content": f"Conversation history:\n{conversation_history}"})
         
         # Call OpenAI
-        kwargs = openai_kwargs(model_key)
-        client = openai.AsyncOpenAI(**kwargs)
-        
-        # Get the actual model name
-        model_name = os.getenv(model_key, "gpt-3.5-turbo")
-        
-        response = await client.chat.completions.create(
-            model=model_name,
-            messages=[{"role": "user", "content": user_msg}],
-            max_tokens=2000,
+        client = openai.OpenAI(**openai_kwargs())
+        response = client.chat.completions.create(
+            model=get_model_key(model_key),
+            messages=messages,
             temperature=0.1,
+            max_tokens=2000
         )
         
-        # Log prompt and tokens
-        total_tokens = response.usage.total_tokens if response.usage else 0
-        log_prompt_and_tokens("llm/prompts/planner.txt", total_tokens, model_name)
+        # Log the interaction
+        log_prompt_and_tokens(messages, response.usage)
         
-        # Extract JSON from response
+        # Parse the response
         content = response.choices[0].message.content
+        return extract_final_answer(content)
         
-        # Try to find JSON in the response
-        if "FinalAnswer:" in content:
-            json_str = content.split("FinalAnswer:")[-1].strip()
-            try:
-                return json.loads(json_str)
-            except:
-                pass
-        
-        # Fallback: try to parse the entire response as JSON
-        try:
-            return json.loads(content)
-        except:
-            # Return a safe fallback
-            return {
-                "summary": "Unable to process query at this time",
-                "insights": [],
-                "discussion": [],
-                "actions": [],
-                "ramki_quote": "",
-                "followups": ["Please try rephrasing your question"],
-                "sources": []
-            }
-            
     except Exception as e:
         print(f"Planner error: {e}")
         return {
@@ -167,19 +166,53 @@ async def react(model_key: str, query: str, context: str, search_results: List[A
             "sources": []
         }
 
-def _generate_mock_response(query: str, search_results: List[Any]) -> Dict[str, Any]:
-    """Generate a mock response for development mode."""
+def _generate_mock_response(query: str, search_results: List[Any], conversation_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Generate a mock response for development mode that strictly adheres to Truth Policy."""
+    
+    # Debug output
+    print(f"🔍 Mock response called with query: '{query}'")
+    print(f"🔍 Search results count: {len(search_results) if search_results else 0}")
+    if search_results and len(search_results) > 0:
+        print(f"🔍 First search result: {search_results[0].text[:100]}...")
+    
+    # Get conversation context
+    conv_context = conversation_context or {}
+    previous_queries = conv_context.get("previous_queries", [])
+    previous_responses = conv_context.get("previous_responses", [])
+    
+    # Check if this is a follow-up question
+    follow_up_indicators = ["what about", "tell me more", "and", "also", "additionally", "furthermore", "moreover", "specifically", "in detail", "elaborate", "what else", "anything else"]
+    is_follow_up = any(indicator in query.lower() for indicator in follow_up_indicators)
     
     # Check for unverifiable claims that should trigger SAFE_FAIL
+    # More precise detection to avoid false positives
     query_lower = query.lower()
     unverifiable_claims = [
         "promise", "guarantee", "10x", "10X", "revenue", "profit", "success",
         "will happen", "definitely", "certainly", "assure", "commit"
     ]
     
-    has_unverifiable_claim = any(claim in query_lower for claim in unverifiable_claims)
+    # Only trigger SAFE_FAIL if the query contains specific unverifiable claim patterns
+    # Not just individual words, but specific phrases that indicate unverifiable claims
+    has_unverifiable_claim = False
+    for claim in unverifiable_claims:
+        if claim in query_lower:
+            # Check if it's part of a legitimate query pattern
+            legitimate_patterns = [
+                "status", "current status", "project status", "what is the status",
+                "progress", "current progress", "project progress", "what is the progress",
+                "discussion", "discussions", "meeting", "meetings", "call", "calls",
+                "decision", "decisions", "update", "updates", "report", "reports"
+            ]
+            
+            # If the query contains legitimate patterns, don't flag as unverifiable
+            is_legitimate = any(pattern in query_lower for pattern in legitimate_patterns)
+            if not is_legitimate:
+                has_unverifiable_claim = True
+                break
     
     if has_unverifiable_claim:
+        print(f"🔍 Query flagged as unverifiable claim: '{query}'")
         return {
             "summary": "This information is not available in the provided transcripts",
             "insights": [],
@@ -191,101 +224,72 @@ def _generate_mock_response(query: str, search_results: List[Any]) -> Dict[str, 
             "safe_fail": True
         }
     
-    if not search_results:
+    # Check if search results are empty or None
+    if not search_results or len(search_results) == 0:
+        print(f"🔍 No search results found for query: '{query}'")
         return {
-            "summary": "Buddy, I don't have a recent source for that—want me to widen the search?",
+            "summary": "This information is not available in the provided transcripts",
             "insights": [],
             "discussion": [],
             "actions": [],
             "ramki_quote": "",
-            "followups": ["Please try again"],
+            "followups": ["Please ask about specific discussions or decisions"],
             "sources": []
         }
     
-    # Extract key information from search results
+    # Extract key information from search results - TRUTH POLICY COMPLIANT
     insights = []
     discussion = []
     sources = []
     
-    # Determine the topic from the query
-    query_lower = query.lower()
-    topic = None
-    if "optum" in query_lower:
-        topic = "Optum"
-    elif "mississippi" in query_lower:
-        topic = "Mississippi"
-    elif "pixel" in query_lower:
-        topic = "Pixel"
-    elif "olympus" in query_lower:
-        topic = "Olympus"
-    elif "sigma" in query_lower:
-        topic = "Sigma"
-    elif "balaji" in query_lower:
-        topic = "Balaji"
-    elif "schedule" in query_lower or "meet" in query_lower or "call" in query_lower:
-        topic = "Calendar"
-    else:
-        topic = "the topic"
-    
+    # Process actual search results to extract real insights
     for chunk in search_results[:3]:  # Use top 3 results
-        chunk_text_lower = chunk.text.lower()
+        chunk_text = chunk.text.strip()
+        chunk_text_lower = chunk_text.lower()
         
-        # Extract key insights based on topic
-        if topic.lower() in chunk_text_lower and "ramki" in chunk_text_lower:
-            if topic == "Optum":
-                insights.append(f"Ramki provided guidance on Optum technical approach and compliance requirements")
-            elif topic == "Mississippi":
-                insights.append(f"Ramki gave direction on Mississippi project scope, boundaries, and deliverables")
-            elif topic == "Pixel":
-                insights.append(f"Ramki discussed Pixel reliability and technical architecture")
-            elif topic == "Olympus":
-                insights.append(f"Ramki provided insights on Olympus SaaS architecture and compliance")
-            elif topic == "Sigma":
-                insights.append(f"Ramki highlighted the strategic handover of Sigma to the Pixel team")
-            elif topic == "Balaji":
-                insights.append(f"Ramki provided inputs to Balaji on legacy OMS refactor and key deliverables")
-            elif topic == "Calendar":
-                insights.append(f"Calendar scheduling request detected")
-            else:
-                insights.append(f"Ramki provided guidance on {topic} technical approach and requirements")
+        # Extract insights from any meaningful chunk content
+        if len(chunk_text) > 30:  # Ensure substantial content
+            # Extract the first meaningful sentence or phrase
+            sentences = chunk_text.split('.')
+            if sentences:
+                first_sentence = sentences[0].strip()
+                if len(first_sentence) > 20:  # Ensure meaningful content
+                    insights.append(f"From {chunk.source_id}: {first_sentence}...")
             
-            discussion.append(f"From {chunk.source_id}: {chunk.text[:200]}...")
+            # Add to discussion points
+            discussion.append(f"From {chunk.source_id}: {chunk_text[:200]}...")
             sources.append(chunk.chunk_id)
     
+    # If no meaningful insights found, return SAFE_FAIL
     if not insights:
-        if topic == "Mississippi":
-            insights.append("Ramki has discussed Mississippi project in various contexts including scope boundaries and deliverables")
-        elif topic == "Optum":
-            insights.append("Ramki has discussed Optum in various contexts including technical architecture and compliance")
-        elif topic == "Sigma":
-            insights.append("Ramki has discussed Sigma project transitions and strategic handovers to Pixel team")
-        elif topic == "Balaji":
-            insights.append("Ramki has provided inputs to Balaji on legacy OMS refactor and key deliverables")
-        elif topic == "Calendar":
-            insights.append("Calendar scheduling request detected")
-        else:
-            insights.append(f"Ramki has discussed {topic} in various contexts including technical architecture and compliance")
+        print(f"🔍 No meaningful insights extracted from search results for query: '{query}'")
+        return {
+            "summary": "This information is not available in the provided transcripts",
+            "insights": [],
+            "discussion": [],
+            "actions": [],
+            "ramki_quote": "",
+            "followups": ["Please ask about specific discussions or decisions"],
+            "sources": []
+        }
     
-    # Generate appropriate quote based on topic
-    if topic == "Mississippi":
-        ramki_quote = "Project boundaries must be clearly defined and deliverables should be well-scoped"
-    elif topic == "Optum":
-        ramki_quote = "Technical decisions should be well-documented and compliance requirements must be clearly understood"
-    elif topic == "Sigma":
-        ramki_quote = "Strategic handover of Sigma to the Pixel team for consistent launch and growth"
-    elif topic == "Balaji":
-        ramki_quote = "Legacy OMS refactor using modern tooling and accelerate key deliverables"
-    elif topic == "Calendar":
-        ramki_quote = "I can help you schedule a meeting with Ramki"
-    else:
-        ramki_quote = "Technical decisions should be well-documented and project requirements must be clearly understood"
+    # Generate response based on actual content found
+    summary = "Based on the available transcripts, here are the relevant discussions found"
+    followups = ["Would you like more specific details about any aspect?", "Should I search for more recent discussions?"]
     
+    # Enhance response for follow-up questions
+    if is_follow_up and previous_queries:
+        last_query = previous_queries[-1]
+        summary = f"Following up on your question about '{last_query}', here are additional relevant discussions found"
+        followups = ["Would you like me to elaborate on any specific aspect?", "Should I search for more related information?"]
+    
+    print(f"🔍 Generated mock response with {len(insights)} insights for query: '{query}'")
     return {
-        "summary": f"Based on the available context, here are Ramki's key insights on {topic}",
+        "summary": summary,
         "insights": insights,
         "discussion": discussion,
         "actions": [],
-        "ramki_quote": ramki_quote,
-        "followups": ["Would you like more specific details about any aspect?", "Should I search for more recent discussions?"],
+        "ramki_quote": "",
+        "followups": followups,
         "sources": sources
     } 

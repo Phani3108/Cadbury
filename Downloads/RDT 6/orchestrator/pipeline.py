@@ -33,6 +33,7 @@ class PipelineContext:
     query: str
     user_id: Optional[str] = None
     session_id: Optional[str] = None
+    conversation_context: Optional[Dict[str, Any]] = None
     intent: Optional[str] = None
     entities: Optional[List[str]] = None
     search_results: Optional[List[Dict[str, Any]]] = None
@@ -55,7 +56,7 @@ class DigitalTwinPipeline:
         
     @log_execution_time
     async def process_query(self, query: str, user_id: Optional[str] = None, 
-                          session_id: Optional[str] = None) -> Dict[str, Any]:
+                          session_id: Optional[str] = None, conversation_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Process a user query through the complete pipeline.
         
@@ -63,6 +64,7 @@ class DigitalTwinPipeline:
             query: User query string
             user_id: Optional user identifier
             session_id: Optional session identifier
+            conversation_context: Optional conversation context
             
         Returns:
             Dictionary containing the final response and metadata
@@ -71,7 +73,8 @@ class DigitalTwinPipeline:
         context = PipelineContext(
             query=query,
             user_id=user_id,
-            session_id=session_id
+            session_id=session_id,
+            conversation_context=conversation_context or {}
         )
         
         try:
@@ -88,7 +91,8 @@ class DigitalTwinPipeline:
             return {
                 "response": context.formatted_response or context.final_response or "Buddy, I'm having trouble processing that right now. Can you try rephrasing your question?",
                 "metadata": context.metadata or {},
-                "success": True
+                "success": True,
+                "search_results": context.search_results
             }
             
         except Exception as e:
@@ -125,15 +129,53 @@ class DigitalTwinPipeline:
     @trace_span("hybrid_search_stage")
     async def _hybrid_search_stage(self, context: PipelineContext) -> PipelineContext:
         """
-        Stage 2: Multi-document semantic search.
+        Stage 2: Multi-document semantic search with conversation context.
         """
         add_span_attribute("query", context.query)
         add_span_attribute("entities", str(context.entities or []))
         
         try:
             from skills.kb_search import hybrid_search
-            context.search_results = hybrid_search(context.query, context.entities or [], k=10)
+            
+            # Get conversation context
+            conv_context = context.conversation_context or {}
+            previous_queries = conv_context.get("previous_queries", [])
+            search_history = conv_context.get("search_history", [])
+            
+            # Enhance query with context if this is a follow-up
+            enhanced_query = context.query
+            if previous_queries and len(previous_queries) > 0:
+                last_query = previous_queries[-1]
+                # Check if this is a follow-up question
+                follow_up_indicators = ["what about", "tell me more", "and", "also", "additionally", "furthermore", "moreover", "specifically", "in detail", "elaborate"]
+                is_follow_up = any(indicator in context.query.lower() for indicator in follow_up_indicators)
+                
+                if is_follow_up:
+                    # Combine with previous query for better context
+                    enhanced_query = f"{last_query} {context.query}"
+                    add_span_attribute("enhanced_query", enhanced_query)
+            
+            # Perform search
+            context.search_results = hybrid_search(enhanced_query, context.entities or [], k=10)
+            
+            # Merge with search history for consistency
+            if search_history and len(search_history) > 0:
+                # Combine current results with historical results, prioritizing recent
+                all_results = context.search_results + search_history
+                # Remove duplicates based on chunk_id
+                seen_chunks = set()
+                unique_results = []
+                for result in all_results:
+                    chunk_id = getattr(result, 'chunk_id', str(result))
+                    if chunk_id not in seen_chunks:
+                        seen_chunks.add(chunk_id)
+                        unique_results.append(result)
+                # Keep top 10 most relevant results
+                context.search_results = unique_results[:10]
+            
             add_span_attribute("search_results_count", len(context.search_results))
+            add_span_attribute("conversation_context_used", bool(conv_context))
+            
         except Exception as e:
             print(f"Search error: {e}")
             context.search_results = []
@@ -200,7 +242,8 @@ class DigitalTwinPipeline:
                 context.selected_model,
                 context.query,
                 context.compressed_content or "",
-                context.search_results or []
+                context.search_results or [],
+                context.conversation_context
             )
             add_span_attribute("has_summary", bool(context.draft_json.get("summary")))
             add_span_attribute("has_actions", bool(context.draft_json.get("actions")))
@@ -301,11 +344,15 @@ async def run_pipeline(query: str, user_ctx) -> str:
         if not hasattr(user_ctx, 'session_id'):
             user_ctx.session_id = getattr(user_ctx, 'session_id', 'default_session')
         
+        # Get conversation context from user_ctx
+        conversation_context = getattr(user_ctx, 'conversation_context', {})
+        
         # Run the pipeline
         result = await pipeline.process_query(
             query=query,
             user_id=user_ctx.user_id,
-            session_id=user_ctx.session_id
+            session_id=user_ctx.session_id,
+            conversation_context=conversation_context
         )
         
         if result.get("success", False):

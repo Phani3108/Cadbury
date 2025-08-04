@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "appName": {
+      "value": "digital-twin"
+    },
+    "location": {
+      "value": "eastus"
+    },
+    "environment": {
+      "value": "dev"
+    },
+    "imageTag": {
+      "value": "v0.9.0-pilot"
+    },
+    "registryServer": {
+      "value": ""
+    },
+    "registryUsername": {
+      "value": ""
+    },
+    "registryPassword": {
+      "value": ""
+    },
+    "openaiApiKey": {
+      "value": ""
+    },
+    "searchEndpoint": {
+      "value": ""
+    },
+    "searchKey": {
+      "value": ""
+    },
+    "searchIndex": {
+      "value": "digital-twin-index"
+    },
+    "appInsightsConnectionString": {
+      "value": ""
+    }
+  }
+} 

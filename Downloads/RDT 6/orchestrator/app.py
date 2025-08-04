@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import asyncio
 import json
 import time
@@ -11,37 +11,111 @@ from .sse_router import stream_with_verification
 
 app = FastAPI(title="Digital Twin API", version="1.0.0")
 
+# Global conversation context store
+conversation_contexts: Dict[str, Dict[str, Any]] = {}
+
 class QueryRequest(BaseModel):
     query: str
     user_id: Optional[str] = "default"
     session_id: Optional[str] = "default"
+    conversation_id: Optional[str] = None
 
 class QueryResponse(BaseModel):
     response: str
     model_used: str
     processing_time: float
+    conversation_id: Optional[str] = None
 
 class StreamResponse(BaseModel):
     query_id: str
     parent_query_id: Optional[str] = None
 
+def get_conversation_context(user_id: str, session_id: str, conversation_id: Optional[str] = None) -> Dict[str, Any]:
+    """Get or create conversation context."""
+    context_key = f"{user_id}:{session_id}:{conversation_id or 'default'}"
+    
+    if context_key not in conversation_contexts:
+        conversation_contexts[context_key] = {
+            "previous_queries": [],
+            "previous_responses": [],
+            "topic_context": {},
+            "search_history": [],
+            "last_query": None,
+            "last_response": None
+        }
+    
+    return conversation_contexts[context_key]
+
+def update_conversation_context(user_id: str, session_id: str, conversation_id: Optional[str], 
+                              query: str, response: str, search_results: List[Any] = None):
+    """Update conversation context with new query and response."""
+    context_key = f"{user_id}:{session_id}:{conversation_id or 'default'}"
+    
+    if context_key not in conversation_contexts:
+        conversation_contexts[context_key] = {
+            "previous_queries": [],
+            "previous_responses": [],
+            "topic_context": {},
+            "search_history": [],
+            "last_query": None,
+            "last_response": None
+        }
+    
+    context = conversation_contexts[context_key]
+    
+    # Update context
+    context["previous_queries"].append(query)
+    context["previous_responses"].append(response)
+    context["last_query"] = query
+    context["last_response"] = response
+    
+    # Keep only last 5 queries for memory
+    if len(context["previous_queries"]) > 5:
+        context["previous_queries"] = context["previous_queries"][-5:]
+        context["previous_responses"] = context["previous_responses"][-5:]
+    
+    # Update search history if provided
+    if search_results:
+        context["search_history"].extend(search_results)
+        # Keep only last 20 search results
+        if len(context["search_history"]) > 20:
+            context["search_history"] = context["search_history"][-20:]
+
 @app.post("/chat", response_model=QueryResponse)
 async def chat(request: QueryRequest, user: Dict[str, Any] = Depends(get_current_user)):
     """Process a user query through the Digital Twin pipeline."""
     try:
+        # Get conversation context
+        conv_context = get_conversation_context(
+            user.get('user_id', request.user_id), 
+            request.session_id, 
+            request.conversation_id
+        )
+        
         # Create a simple user context
         user_ctx = type('UserContext', (), {
             'user_id': user.get('user_id', request.user_id),
-            'session_id': request.session_id
+            'session_id': request.session_id,
+            'conversation_context': conv_context
         })()
         
         # Run the pipeline
         response = await run_pipeline(request.query, user_ctx)
         
+        # Update conversation context
+        update_conversation_context(
+            user.get('user_id', request.user_id),
+            request.session_id,
+            request.conversation_id,
+            request.query,
+            response
+        )
+        
         return QueryResponse(
             response=response,
-            model_used="digital_twin",  # We'll enhance this later
-            processing_time=0.0  # We'll add timing later
+            model_used="digital_twin",
+            processing_time=0.0,
+            conversation_id=request.conversation_id
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -50,19 +124,37 @@ async def chat(request: QueryRequest, user: Dict[str, Any] = Depends(get_current
 async def chat_dev(request: QueryRequest):
     """Development endpoint that bypasses authentication."""
     try:
+        # Get conversation context
+        conv_context = get_conversation_context(
+            'dev_user', 
+            request.session_id or 'dev_session', 
+            request.conversation_id
+        )
+        
         # Create a simple user context for development
         user_ctx = type('UserContext', (), {
             'user_id': 'dev_user',
-            'session_id': request.session_id or 'dev_session'
+            'session_id': request.session_id or 'dev_session',
+            'conversation_context': conv_context
         })()
         
         # Run the pipeline
         response = await run_pipeline(request.query, user_ctx)
         
+        # Update conversation context
+        update_conversation_context(
+            'dev_user',
+            request.session_id or 'dev_session',
+            request.conversation_id,
+            request.query,
+            response
+        )
+        
         return QueryResponse(
             response=response,
             model_used="digital_twin",
-            processing_time=0.0
+            processing_time=0.0,
+            conversation_id=request.conversation_id
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
