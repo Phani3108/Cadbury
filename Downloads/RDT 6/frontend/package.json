@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "vue": "^3.3.4",
+    "vue-router": "^4.2.5",
     "@microsoft/teamsfx": "^2.0.0",
     "@microsoft/teams-js": "^2.0.0",
     "axios": "^1.5.0"
