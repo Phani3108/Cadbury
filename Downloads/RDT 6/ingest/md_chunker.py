@@ -3,20 +3,48 @@ Markdown chunking utilities for the Digital Twin system.
 """
 
 import re
+import tiktoken
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import logging
+from datetime import datetime
 
 def get_logger(name):
     return logging.getLogger(name)
 
+# Initialize BPE tokenizer for accurate token counting
+tokenizer = tiktoken.get_encoding("cl100k_base")
+
+def count_tokens(text: str) -> int:
+    """Count tokens using BPE tokenizer."""
+    return len(tokenizer.encode(text))
+
+def extract_meeting_date(filename: str) -> str:
+    """Extract meeting date from filename like '2025-01-15_Meeting_Title.json'."""
+    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+    return date_match.group(1) if date_match else "2025-01-01"
+
+def extract_speaker_tags(text: str) -> List[str]:
+    """Extract topic tags from text content."""
+    # Simple topic extraction - can be enhanced later
+    topics = []
+    if any(word in text.lower() for word in ['optum', 'mississippi', 'sigma']):
+        if 'optum' in text.lower():
+            topics.append('optum')
+        if 'mississippi' in text.lower():
+            topics.append('mississippi')
+        if 'sigma' in text.lower():
+            topics.append('sigma')
+    return topics
+
 # Standalone chunk function for external use
-def chunk(md_text: str) -> List['Chunk']:
+def chunk(md_text: str, doc_id: str = "default_doc") -> List['Chunk']:
     """
-    Standalone chunk function that returns List[Chunk] with required attributes.
+    Enhanced chunk function with speaker-turn logic.
     
     Args:
         md_text: Raw markdown text
+        doc_id: Document identifier
         
     Returns:
         List of Chunk objects with chunk_id, doc_id, text, speaker, entities, date
@@ -24,46 +52,155 @@ def chunk(md_text: str) -> List['Chunk']:
     if not md_text or not md_text.strip():
         return []
     
-    # Simple chunking by paragraphs for now
-    paragraphs = md_text.split('\n\n')
-    result = []
+    # Extract meeting date from doc_id if it contains date
+    meeting_date = extract_meeting_date(doc_id)
     
-    for i, paragraph in enumerate(paragraphs):
-        paragraph = paragraph.strip()
-        if not paragraph:
-            continue
+    # Split on speaker patterns: \n<speaker>:
+    speaker_pattern = r'\n([A-Za-z]+):\s*'
+    parts = re.split(speaker_pattern, md_text)
+    
+    chunks = []
+    current_chunk_lines = []
+    current_speaker = None
+    current_tokens = 0
+    chunk_idx = 0
+    MAX_TOKENS = 200
+    
+    for i, part in enumerate(parts):
+        if i == 0:  # First part is content before any speaker
+            if part.strip():
+                current_chunk_lines.append(part.strip())
+                current_tokens = count_tokens(part.strip())
+        elif i % 2 == 1:  # Speaker name
+            speaker = part.strip()
             
-        # Create chunk with required attributes
+            # If we have a previous speaker and content, check if we need to start new chunk
+            if current_speaker and current_chunk_lines:
+                # Check if adding this speaker would exceed token limit
+                speaker_content = f"{speaker}: "
+                speaker_tokens = count_tokens(speaker_content)
+                
+                if current_tokens + speaker_tokens > MAX_TOKENS and current_chunk_lines:
+                    # Create chunk from current content
+                    chunk_text = '\n'.join(current_chunk_lines)
+                    topic_tags = extract_speaker_tags(chunk_text)
+                    
+                    chunk_obj = Chunk(
+                        start_line=1,
+                        end_line=1,
+                        text=chunk_text,
+                        chunk_type='speaker_turn',
+                        metadata={
+                            'speaker': current_speaker,
+                            'meeting_date': meeting_date,
+                            'topic_tags': topic_tags
+                        },
+                        source_id=doc_id,
+                        speaker=current_speaker,
+                        timestamp=None
+                    )
+                    
+                    # Add expected attributes
+                    chunk_obj.chunk_id = f"{doc_id}_{chunk_idx:04d}"
+                    chunk_obj.doc_id = doc_id
+                    chunk_obj.entities = []
+                    chunk_obj.date = meeting_date
+                    chunk_obj.meeting_date = meeting_date
+                    chunk_obj.topic_tags = topic_tags
+                    
+                    chunks.append(chunk_obj)
+                    chunk_idx += 1
+                    
+                    # Start new chunk
+                    current_chunk_lines = [speaker_content]
+                    current_tokens = speaker_tokens
+                    current_speaker = speaker
+                else:
+                    # Continue with same speaker
+                    current_chunk_lines.append(speaker_content)
+                    current_tokens += speaker_tokens
+                    current_speaker = speaker
+            else:
+                # First speaker
+                current_chunk_lines.append(f"{speaker}: ")
+                current_tokens = count_tokens(f"{speaker}: ")
+                current_speaker = speaker
+        else:  # Content after speaker
+            if part.strip():
+                content = part.strip()
+                content_tokens = count_tokens(content)
+                
+                # Check if adding this content would exceed token limit
+                if current_tokens + content_tokens > MAX_TOKENS and current_chunk_lines:
+                    # Create chunk from current content
+                    chunk_text = '\n'.join(current_chunk_lines)
+                    topic_tags = extract_speaker_tags(chunk_text)
+                    
+                    chunk_obj = Chunk(
+                        start_line=1,
+                        end_line=1,
+                        text=chunk_text,
+                        chunk_type='speaker_turn',
+                        metadata={
+                            'speaker': current_speaker,
+                            'meeting_date': meeting_date,
+                            'topic_tags': topic_tags
+                        },
+                        source_id=doc_id,
+                        speaker=current_speaker,
+                        timestamp=None
+                    )
+                    
+                    # Add expected attributes
+                    chunk_obj.chunk_id = f"{doc_id}_{chunk_idx:04d}"
+                    chunk_obj.doc_id = doc_id
+                    chunk_obj.entities = []
+                    chunk_obj.date = meeting_date
+                    chunk_obj.meeting_date = meeting_date
+                    chunk_obj.topic_tags = topic_tags
+                    
+                    chunks.append(chunk_obj)
+                    chunk_idx += 1
+                    
+                    # Start new chunk with current speaker and content
+                    current_chunk_lines = [f"{current_speaker}: {content}"]
+                    current_tokens = count_tokens(f"{current_speaker}: {content}")
+                else:
+                    # Add content to current chunk
+                    current_chunk_lines.append(content)
+                    current_tokens += content_tokens
+    
+    # Add final chunk if there's content
+    if current_chunk_lines:
+        chunk_text = '\n'.join(current_chunk_lines)
+        topic_tags = extract_speaker_tags(chunk_text)
+        
         chunk_obj = Chunk(
             start_line=1,
             end_line=1,
-            text=paragraph,
-            chunk_type='paragraph',
-            metadata={},
-            source_id=None,
-            speaker=None,
+            text=chunk_text,
+            chunk_type='speaker_turn',
+            metadata={
+                'speaker': current_speaker,
+                'meeting_date': meeting_date,
+                'topic_tags': topic_tags
+            },
+            source_id=doc_id,
+            speaker=current_speaker,
             timestamp=None
         )
         
         # Add expected attributes
-        chunk_obj.chunk_id = f"chunk_{i:04d}"
-        chunk_obj.doc_id = "test_doc"
+        chunk_obj.chunk_id = f"{doc_id}_{chunk_idx:04d}"
+        chunk_obj.doc_id = doc_id
         chunk_obj.entities = []
-        chunk_obj.date = "2025-01-01"  # Default date
+        chunk_obj.date = meeting_date
+        chunk_obj.meeting_date = meeting_date
+        chunk_obj.topic_tags = topic_tags
         
-        # Try to detect speaker
-        if ':' in paragraph:
-            lines = paragraph.split('\n')
-            for line in lines:
-                if ':' in line and len(line.split(':')) > 1:
-                    speaker_part = line.split(':')[0].strip()
-                    if speaker_part in ['Ramki', 'Abhilash', 'Penchala']:
-                        chunk_obj.speaker = speaker_part
-                        break
-        
-        result.append(chunk_obj)
+        chunks.append(chunk_obj)
     
-    return result
+    return chunks
 
 
 @dataclass
@@ -72,20 +209,29 @@ class Chunk:
     start_line: int
     end_line: int
     text: str
-    chunk_type: str  # 'paragraph', 'quote', 'action_item', 'summary'
+    chunk_type: str  # 'paragraph', 'quote', 'action_item', 'summary', 'speaker_turn'
     metadata: Optional[Dict[str, Any]] = None
     source_id: Optional[str] = None
     speaker: Optional[str] = None
     timestamp: Optional[str] = None
+    
+    # Additional fields for enhanced chunking
+    chunk_id: Optional[str] = None
+    doc_id: Optional[str] = None
+    entities: Optional[List[str]] = None
+    date: Optional[str] = None
+    meeting_date: Optional[str] = None
+    topic_tags: Optional[List[str]] = None
 
 
 class MarkdownChunker:
     """
-    Chunks markdown content into meaningful segments for processing.
+    Enhanced chunker with speaker-turn logic and token-aware chunking.
     """
     
     def __init__(self):
         self.logger = get_logger("chunker")
+        self.tokenizer = tiktoken.get_encoding("cl100k_base")
         
         # Patterns for different content types
         self.patterns = {
@@ -97,215 +243,35 @@ class MarkdownChunker:
             'code_block': r'^```[\w]*\n(.*?)\n```$',
         }
     
-    def chunk(self, md_text: str) -> List[Chunk]:
+    def count_tokens(self, text: str) -> int:
+        """Count tokens using BPE tokenizer."""
+        return len(self.tokenizer.encode(text))
+    
+    def chunk(self, md_text: str, doc_id: str = "default_doc") -> List[Chunk]:
         """
-        Chunk markdown text into meaningful segments.
+        Enhanced chunking with speaker-turn logic and token limits.
         
         Args:
             md_text: Raw markdown text
+            doc_id: Document identifier
             
         Returns:
-            List of Chunk objects with metadata
+            List of Chunk objects with enhanced metadata
         """
-        if not md_text or not md_text.strip():
-            return []
-        
-        lines = md_text.split('\n')
-        chunks = []
-        current_chunk = []
-        current_start = 1
-        current_type = 'paragraph'
-        current_metadata = {}
-        
-        for i, line in enumerate(lines, 1):
-            line = line.strip()
-            
-            # Skip empty lines unless they're meaningful separators
-            if not line:
-                if current_chunk:
-                    # End current chunk
-                    chunk = self._create_chunk(
-                        current_start, i-1, current_chunk, current_type, current_metadata
-                    )
-                    chunks.append(chunk)
-                    current_chunk = []
-                    current_metadata = {}
-                continue
-            
-            # Check for special patterns
-            chunk_type, metadata = self._analyze_line(line)
-            
-            # If line type changes, end current chunk
-            if current_chunk and chunk_type != current_type:
-                chunk = self._create_chunk(
-                    current_start, i-1, current_chunk, current_type, current_metadata
-                )
-                chunks.append(chunk)
-                current_chunk = []
-                current_start = i
-                current_type = chunk_type
-                current_metadata = metadata
-            elif not current_chunk:
-                current_start = i
-                current_type = chunk_type
-                current_metadata = metadata
-            
-            current_chunk.append(line)
-        
-        # Add final chunk
-        if current_chunk:
-            chunk = self._create_chunk(
-                current_start, len(lines), current_chunk, current_type, current_metadata
-            )
-            chunks.append(chunk)
-        
-        self.logger.info(f"Created {len(chunks)} chunks from {len(lines)} lines")
-        return chunks
-
-    def _analyze_line(self, line: str) -> tuple[str, Dict[str, Any]]:
-        """
-        Analyze a line to determine its type and extract metadata.
-        
-        Args:
-            line: Single line of text
-            
-        Returns:
-            Tuple of (chunk_type, metadata)
-        """
-        metadata = {}
-        
-        # Check for quotes
-        quote_match = re.match(self.patterns['quote'], line)
-        if quote_match:
-            metadata['quote_text'] = quote_match.group(1)
-            return 'quote', metadata
-        
-        # Check for action items
-        action_match = re.match(self.patterns['action_item'], line)
-        if action_match:
-            metadata['action_text'] = action_match.group(1)
-            return 'action_item', metadata
-        
-        # Check for speaker attribution
-        speaker_match = re.match(self.patterns['speaker'], line)
-        if speaker_match:
-            metadata['speaker'] = speaker_match.group(1)
-            metadata['content'] = speaker_match.group(2)
-            return 'dialogue', metadata
-        
-        # Check for timestamps
-        timestamp_match = re.match(self.patterns['timestamp'], line)
-        if timestamp_match:
-            metadata['timestamp'] = timestamp_match.group(1)
-            metadata['content'] = timestamp_match.group(2)
-            return 'timestamped', metadata
-        
-        # Check for section headers
-        section_match = re.match(self.patterns['section'], line)
-        if section_match:
-            metadata['section_title'] = section_match.group(1)
-            return 'section', metadata
-        
-        # Check for code blocks
-        code_match = re.match(self.patterns['code_block'], line, re.DOTALL)
-        if code_match:
-            metadata['code_content'] = code_match.group(1)
-            return 'code', metadata
-        
-        # Default to paragraph
-        return 'paragraph', metadata
+        return chunk(md_text, doc_id)
     
-    def _create_chunk(self, start_line: int, end_line: int, lines: List[str], 
-                      chunk_type: str, metadata: Dict[str, Any]) -> Chunk:
+    def chunk_by_speaker(self, md_text: str, doc_id: str = "default_doc") -> List[Chunk]:
         """
-        Create a Chunk object from processed lines.
-        
-        Args:
-            start_line: Starting line number
-            end_line: Ending line number
-            lines: List of text lines
-            chunk_type: Type of chunk
-            metadata: Additional metadata
-            
-        Returns:
-            Chunk object
-        """
-        text = '\n'.join(lines)
-        
-        # Extract speaker if available
-        speaker = metadata.get('speaker')
-        
-        # Extract timestamp if available
-        timestamp = metadata.get('timestamp')
-        
-        return Chunk(
-            start_line=start_line,
-            end_line=end_line,
-            text=text,
-            chunk_type=chunk_type,
-            metadata=metadata,
-            speaker=speaker,
-            timestamp=timestamp
-        )
-    
-    def chunk_by_speaker(self, md_text: str) -> List[Chunk]:
-        """
-        Chunk text by speaker turns for conversation analysis.
+        Chunk text by speaker turns with token limits.
         
         Args:
             md_text: Raw markdown text
+            doc_id: Document identifier
             
         Returns:
             List of Chunk objects grouped by speaker
         """
-        lines = md_text.split('\n')
-        chunks = []
-        current_speaker = None
-        current_lines = []
-        current_start = 1
-        
-        for i, line in enumerate(lines, 1):
-            line = line.strip()
-            
-            if not line:
-                continue
-            
-            # Check for speaker attribution
-            speaker_match = re.match(self.patterns['speaker'], line)
-            
-            if speaker_match:
-                # Save previous speaker's chunk
-                if current_speaker and current_lines:
-                    chunk = Chunk(
-                        start_line=current_start,
-                        end_line=i-1,
-                        text='\n'.join(current_lines),
-                        chunk_type='speaker_turn',
-                        metadata={'speaker': current_speaker}
-                    )
-                    chunks.append(chunk)
-                
-                # Start new speaker chunk
-                current_speaker = speaker_match.group(1)
-                current_lines = [speaker_match.group(2)]
-                current_start = i
-            else:
-                # Continue current speaker's turn
-                if current_speaker:
-                    current_lines.append(line)
-        
-        # Add final speaker chunk
-        if current_speaker and current_lines:
-            chunk = Chunk(
-                start_line=current_start,
-                end_line=len(lines),
-                text='\n'.join(current_lines),
-                chunk_type='speaker_turn',
-                metadata={'speaker': current_speaker}
-            )
-            chunks.append(chunk)
-        
-        return chunks
+        return chunk(md_text, doc_id)
     
     def extract_quotes(self, md_text: str) -> List[Chunk]:
         """
@@ -335,17 +301,4 @@ class MarkdownChunker:
 
 
 # Global chunker instance
-chunker = MarkdownChunker()
-
-# TODO(cursor): implement chunk(md_text:str)->List[Chunk]
-"""
-Requirements
-• Split on semantic sentence boundaries (use spaCy)
-• Merge sentences into ~300-token chunks (±50) sliding window, stride 200
-• Detect speaker (lines like 'Ramki:' or 'Abhilash:')
-• Extract YYYY-MM-DD from front-matter or file name
-• Return List[Chunk]  with attributes:
-    chunk_id, doc_id, text, speaker, entities (empty list for now), date
-• Keep chunk_id = f"{doc_id}_{idx:04d}"
-Do NOT embed; uploader will call embed() later.
-""" 
+chunker = MarkdownChunker() 

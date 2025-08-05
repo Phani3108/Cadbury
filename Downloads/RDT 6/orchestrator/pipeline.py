@@ -128,85 +128,117 @@ class DigitalTwinPipeline:
     
     @trace_span("hybrid_search_stage")
     async def _hybrid_search_stage(self, context: PipelineContext) -> PipelineContext:
-        """
-        Stage 2: Multi-document semantic search with conversation context.
-        """
-        add_span_attribute("query", context.query)
-        add_span_attribute("entities", str(context.entities or []))
-        
+        """Hybrid search stage using vector and keyword search."""
         try:
             from skills.kb_search import hybrid_search
             
-            # Get conversation context
+            # Get conversation context for enhanced queries
             conv_context = context.conversation_context or {}
-            previous_queries = conv_context.get("previous_queries", [])
-            search_history = conv_context.get("search_history", [])
+            previous_queries = conv_context.get('previous_queries', [])
+            search_history = conv_context.get('search_history', [])
             
             # Enhance query with context if this is a follow-up
             enhanced_query = context.query
-            if previous_queries and len(previous_queries) > 0:
-                last_query = previous_queries[-1]
-                # Check if this is a follow-up question
-                follow_up_indicators = ["what about", "tell me more", "and", "also", "additionally", "furthermore", "moreover", "specifically", "in detail", "elaborate"]
+            if previous_queries:
+                # Check for follow-up indicators
+                follow_up_indicators = ['what about', 'and', 'also', 'how about', 'tell me more', 'what else']
                 is_follow_up = any(indicator in context.query.lower() for indicator in follow_up_indicators)
                 
                 if is_follow_up:
                     # Combine with previous query for better context
-                    enhanced_query = f"{last_query} {context.query}"
-                    add_span_attribute("enhanced_query", enhanced_query)
+                    enhanced_query = f"{previous_queries[-1]} {context.query}"
             
-            # Perform search
-            context.search_results = hybrid_search(enhanced_query, context.entities or [], k=10)
+            # Perform search with new two-phase semantic search
+            search_results = hybrid_search(
+                query=enhanced_query,
+                entities=context.entities or [],
+                k=10,
+                recency_days=270  # Truth Policy compliance
+            )
             
             # Merge with search history for consistency
-            if search_history and len(search_history) > 0:
-                # Combine current results with historical results, prioritizing recent
-                all_results = context.search_results + search_history
-                # Remove duplicates based on chunk_id
-                seen_chunks = set()
-                unique_results = []
-                for result in all_results:
-                    chunk_id = getattr(result, 'chunk_id', str(result))
-                    if chunk_id not in seen_chunks:
-                        seen_chunks.add(chunk_id)
-                        unique_results.append(result)
-                # Keep top 10 most relevant results
-                context.search_results = unique_results[:10]
+            all_results = search_results + search_history
+            unique_results = []
+            seen_ids = set()
             
-            add_span_attribute("search_results_count", len(context.search_results))
-            add_span_attribute("conversation_context_used", bool(conv_context))
+            for result in all_results:
+                if result.chunk_id not in seen_ids:
+                    unique_results.append(result)
+                    seen_ids.add(result.chunk_id)
+            
+            # Keep top 10 results
+            context.search_results = unique_results[:10]
+            
+            # Store search debug info in span attributes
+            search_debug = {
+                "vector_hits": len(search_results),
+                "keyword_hits": len([r for r in search_results if hasattr(r, 'score')]),
+                "rerank_latency_ms": 0,  # Will be updated if reranker is enabled
+                "enhanced_query": enhanced_query,
+                "original_query": context.query,
+                "is_follow_up": len(previous_queries) > 0
+            }
+            
+            # Add search debug to span attributes
+            from digital_twin.observability.tracing import add_span_attribute
+            for key, value in search_debug.items():
+                add_span_attribute(key, value)
+            
+            self.logger.info(f"Search found {len(context.search_results)} results")
             
         except Exception as e:
-            print(f"Search error: {e}")
+            self.logger.error(f"Search stage failed: {e}")
             context.search_results = []
-            add_span_attribute("search_error", str(e))
+        
         return context
 
     @trace_span("coherence_stage")
     async def _coherence_stage(self, context: PipelineContext) -> PipelineContext:
-        """
-        Stage 3: Filter off-topic chunks.
-        """
-        add_span_attribute("input_chunks", len(context.search_results or []))
+        """Coherence filtering stage (optional)."""
+        try:
+            # Check if coherence filtering is enabled
+            import os
+            if os.getenv("COHERENCE_FILTER_ENABLED", "false").lower() != "true":
+                self.logger.info("Coherence filtering disabled, skipping stage")
+                context.coherent_content = context.search_results
+                return context
+            
+            # Apply coherence filter
+            if context.search_results:
+                context.coherent_content = coherence_filter(context.search_results)
+                add_span_attribute("input_chunks", len(context.search_results))
+                add_span_attribute("filtered_chunks", len(context.coherent_content))
+            else:
+                context.coherent_content = []
+                
+        except Exception as e:
+            self.logger.error(f"Coherence stage failed: {e}")
+            context.coherent_content = context.search_results or []
         
-        if context.search_results:
-            context.search_results = coherence_filter(context.search_results, context.query)
-            add_span_attribute("filtered_chunks", len(context.search_results))
         return context
 
     @trace_span("compress_stage")
     async def _compress_stage(self, context: PipelineContext) -> PipelineContext:
-        """
-        Stage 4: Compress chunks to token limit.
-        """
-        add_span_attribute("input_chunks", len(context.search_results or []))
-        
-        if context.search_results:
-            context.compressed_content = compress(context.search_results, context.query)
-            add_span_attribute("compressed_length", len(context.compressed_content))
-        else:
+        """Content compression stage using Chain-of-Density."""
+        try:
+            # Use coherent_content if available, otherwise fall back to search_results
+            input_content = context.coherent_content or context.search_results or []
+            
+            if input_content:
+                # Compress the content using Chain-of-Density
+                context.compressed_content = compress(input_content)
+                add_span_attribute("input_chunks", len(input_content))
+                add_span_attribute("compressed_length", len(context.compressed_content))
+                self.logger.info(f"Compressed {len(input_content)} chunks to {len(context.compressed_content)} characters")
+            else:
+                context.compressed_content = ""
+                add_span_attribute("input_chunks", 0)
+                add_span_attribute("compressed_length", 0)
+                
+        except Exception as e:
+            self.logger.error(f"Compression stage failed: {e}")
             context.compressed_content = ""
-            add_span_attribute("compressed_length", 0)
+        
         return context
 
     @trace_span("router_stage")
@@ -229,81 +261,110 @@ class DigitalTwinPipeline:
 
     @trace_span("planner_stage")
     async def _planner_stage(self, context: PipelineContext) -> PipelineContext:
-        """
-        Stage 6: Generate response using ReAct planner.
-        """
-        add_span_attribute("model", context.selected_model)
-        add_span_attribute("query", context.query)
-        
+        """Planning stage using ReAct pattern."""
         try:
             from llm.planner import react
             
-            context.draft_json = await react(
-                context.selected_model,
-                context.query,
-                context.compressed_content or "",
-                context.search_results or [],
-                context.conversation_context
+            # Get conversation context for enhanced planning
+            conv_context = context.conversation_context or {}
+            previous_queries = conv_context.get('previous_queries', [])
+            previous_responses = conv_context.get('previous_responses', [])
+            
+            # Create enhanced query with context
+            enhanced_query = context.query
+            if previous_queries:
+                enhanced_query = f"Previous context: {previous_queries[-1]}. Current query: {context.query}"
+            
+            # Call planner with conversation context
+            result = await react(
+                model_key="MODEL_GPT4",
+                query=enhanced_query,
+                context=context.compressed_content or "",
+                search_results=context.search_results or [],
+                conversation_context=conv_context
             )
-            add_span_attribute("has_summary", bool(context.draft_json.get("summary")))
-            add_span_attribute("has_actions", bool(context.draft_json.get("actions")))
+            
+            context.plan = result
+            add_span_attribute("model", result.get("model", "unknown"))
+            add_span_attribute("query", context.query)
+            add_span_attribute("has_summary", "summary" in result)
+            add_span_attribute("has_actions", "actions" in result)
+            
         except Exception as e:
-            print(f"Planner error: {e}")
-            context.draft_json = {
-                "summary": "Unable to process query",
-                "insights": [],
-                "discussion": [],
-                "actions": [],
-                "ramki_quote": "",
-                "followups": ["Please try again"],
-                "sources": []
-            }
-            add_span_attribute("planner_error", str(e))
+            self.logger.error(f"Planning stage failed: {e}")
+            context.plan = {"error": str(e)}
+        
         return context
 
     @trace_span("verifier_stage")
     async def _verifier_stage(self, context: PipelineContext) -> PipelineContext:
-        """
-        Stage 7: Verify response against truth policy.
-        """
-        add_span_attribute("has_draft", bool(context.draft_json))
-        
+        """Verification stage using Truth Policy."""
         try:
             from llm.verifier import check
-            context.verification_result = await check(
-                context.draft_json,
-                context.search_results or []
-            )
-            add_span_attribute("verification_valid", context.verification_result.get("valid", False))
             
-            # If verification fails, set safe_fail flag
-            if not context.verification_result.get("valid", False):
-                if context.draft_json:
-                    context.draft_json["safe_fail"] = True
-                    
+            if context.plan and "error" not in context.plan:
+                # Verify the plan against Truth Policy
+                verification_result = await check(
+                    draft=context.plan,
+                    chunks=context.search_results or []
+                )
+                
+                context.verified_response = verification_result
+                add_span_attribute("has_draft", True)
+                add_span_attribute("verification_valid", verification_result.get("valid", False))
+            else:
+                context.verified_response = {"valid": False, "reason": "no_plan"}
+                add_span_attribute("has_draft", False)
+                add_span_attribute("verification_valid", False)
+                
         except Exception as e:
-            # Log verification error and set safe_fail
-            print(f"Verification failed: {e}")
-            if context.draft_json:
-                context.draft_json["safe_fail"] = True
-            context.verification_result = {"valid": False, "reason": str(e)}
-            
+            self.logger.error(f"Verification stage failed: {e}")
+            context.verified_response = {"valid": False, "reason": f"error: {e}"}
+        
         return context
 
     @trace_span("formatter_stage")
     async def _formatter_stage(self, context: PipelineContext) -> PipelineContext:
-        """
-        Stage 8: Format response for user.
-        """
-        add_span_attribute("intent", context.intent)
-        add_span_attribute("has_draft", bool(context.draft_json))
+        """Formatting stage for final response."""
+        try:
+            from orchestrator.formatter import render
+            
+            # Determine intent for formatting
+            intent = context.intent or "general"
+            
+            # Check if we have a valid plan and verification
+            if (context.plan and "error" not in context.plan and 
+                context.verified_response and context.verified_response.get("valid", False)):
+                
+                # Format the response
+                formatted_response = render(
+                    intent=intent,
+                    draft_json=context.plan,
+                    search_results=context.search_results or []
+                )
+                
+                context.formatted_response = formatted_response
+                add_span_attribute("intent", intent)
+                add_span_attribute("has_draft", True)
+                add_span_attribute("response_length", len(formatted_response))
+                
+            else:
+                # Handle error case
+                error_reason = "unknown"
+                if context.plan and "error" in context.plan:
+                    error_reason = context.plan["error"]
+                elif context.verified_response:
+                    error_reason = context.verified_response.get("reason", "verification_failed")
+                
+                context.formatted_response = f"Sorry, I encountered an error: {error_reason}. Please try again."
+                add_span_attribute("intent", intent)
+                add_span_attribute("has_draft", False)
+                add_span_attribute("response_length", len(context.formatted_response))
+                
+        except Exception as e:
+            self.logger.error(f"Formatting stage failed: {e}")
+            context.formatted_response = "Sorry, I encountered an error. Please try again."
         
-        from .formatter import render
-        context.formatted_response = render(
-            context.intent or "INSIGHT",
-            context.draft_json
-        )
-        add_span_attribute("response_length", len(context.formatted_response or ""))
         return context
 
 # TODO(cursor): implement async run_pipeline(query:str, user_ctx)->dict

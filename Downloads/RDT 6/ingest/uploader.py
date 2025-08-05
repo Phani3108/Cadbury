@@ -7,7 +7,7 @@ from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 from ingest.md_chunker import chunk
 from ingest.quote_rewriter import rewrite_quote
-from sentence_transformers import SentenceTransformer
+from ingest.embed import get_embedding, batch_get_embeddings
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -15,19 +15,13 @@ def get_azure_search_client():
     """Get Azure Search client."""
     endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
     key = os.getenv("AZURE_SEARCH_KEY")
-    index_name = os.getenv("AZURE_INDEX")
+    index_name = os.getenv("AZURE_INDEX", "dt-chunks-v2")  # Use new index name
     
-    if not all([endpoint, key, index_name]):
+    if not all([endpoint, key]):
         raise ValueError("Azure Search environment variables not configured")
     
     credential = AzureKeyCredential(key)
     return SearchClient(endpoint=endpoint, index_name=index_name, credential=credential)
-
-def embed(text: str) -> list:
-    """Generate embeddings for text."""
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    embedding = model.encode(text)
-    return embedding.tolist()
 
 def process_file(path: str):
     """Process a single JSON file and yield documents for upload."""
@@ -40,25 +34,31 @@ def process_file(path: str):
     attendees = data.get('attendees', [])
     content = data.get('content', '')
     
-    # Chunk the content
-    chunks = chunk(content)
+    # Chunk the content with new speaker-turn logic
+    chunks = chunk(content, doc_id)
     
-    for i, c in enumerate(chunks):
+    # Batch process embeddings for efficiency
+    texts = []
+    for c in chunks:
         # Process Ramki quotes
         if c.speaker == "Ramki":
             c.text = rewrite_quote(c.text)
-        
-        # Generate embedding
-        embedding = embed(c.text)
-        
+        texts.append(c.text)
+    
+    # Get embeddings in batch
+    embeddings = batch_get_embeddings(texts)
+    
+    for i, (c, embedding) in enumerate(zip(chunks, embeddings)):
         doc = {
-            "id": f"{doc_id}_{i:04d}",
-            "doc_id": doc_id,
+            "id": c.chunk_id,  # Use chunk_id from new chunker
+            "doc_id": c.doc_id,
             "text": c.text,
-            "date": date,
+            "date": c.date or date,
+            "meeting_date": c.meeting_date,
             "attendees": attendees,
             "entities": c.entities or [],
             "speaker": c.speaker,
+            "topic_tags": c.topic_tags or [],
             "source_id": f"Source-{doc_id}-{i:04d}",
             "embedding": embedding
         }
@@ -91,46 +91,38 @@ def upload_documents(directory: str, batch_size: int = 100):
     
     print(f"✅ Upload complete: {total_uploaded} documents uploaded to Azure Search")
 
-def main(directory: str, dry_run: bool = False):
+def main(directory: str, dry_run: bool = False, rechunk: bool = False):
     """Main function to upload documents."""
     try:
         if dry_run:
             print(f"🔍 DRY RUN MODE - Would upload documents from {directory}")
             # Count documents that would be uploaded
-            import glob
-            import json
-            json_files = glob.glob(os.path.join(directory, "*.json"))
             total_chunks = 0
-            
-            for json_file in json_files:
-                print(f"📄 Would process: {json_file}")
-                try:
-                    with open(json_file, 'r') as f:
-                        data = json.load(f)
-                        if 'chunks' in data:
-                            total_chunks += len(data['chunks'])
-                        else:
-                            total_chunks += 1  # Assume at least one chunk per file
-                except Exception as e:
-                    print(f"⚠️ Error reading {json_file}: {e}")
-                    total_chunks += 1  # Assume one chunk even if we can't read it
-            
-            print(f"✅ DRY RUN: Would upload {len(json_files)} files with {total_chunks} total chunks")
-            return 0
-        else:
-            upload_documents(directory)
+            for json_file in glob.glob(os.path.join(directory, "*.json")):
+                chunks = list(process_file(json_file))
+                total_chunks += len(chunks)
+                print(f"  {os.path.basename(json_file)}: {len(chunks)} chunks")
+            print(f"📊 Total chunks: {total_chunks}")
+            return
+        
+        if rechunk:
+            print("🔄 Rechunking mode - processing with new speaker-turn logic")
+        
+        upload_documents(directory)
+        
     except Exception as e:
-        print(f"❌ Upload failed: {e}")
-        return 1
-    return 0
+        print(f"❌ Error: {e}")
+        raise
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) < 2:
-        print("Usage: python -m ingest.uploader <json_directory> [--dry-run]")
-        sys.exit(1)
+    import argparse
     
-    directory = sys.argv[1]
-    dry_run = "--dry-run" in sys.argv
+    parser = argparse.ArgumentParser(description="Upload documents to Azure Search")
+    parser.add_argument("directory", help="Directory containing JSON files")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be uploaded")
+    parser.add_argument("--rechunk", action="store_true", help="Use new speaker-turn chunking")
     
-    exit(main(directory, dry_run)) 
+    args = parser.parse_args()
+    
+    main(args.directory, dry_run=args.dry_run, rechunk=args.rechunk) 
