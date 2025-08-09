@@ -1,0 +1,20 @@
+[tool.poetry.dependencies]
+langdetect = ">=1.0.9"
+# Minimal pyproject.toml for AAH backend
+[project]
+name = "aah-api"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+	"fastapi>=0.111.0",
+	"uvicorn[standard]>=0.30.0",
+	"PyYAML>=6.0.1",
+	"jsonschema>=4.22.0",
+	"httpx>=0.27.0",
+	"prometheus_client>=0.20.0",
+	"PyJWT>=2.8.0",
+	"passlib[bcrypt]>=1.7.4"
+]
+
+[project.scripts]
+aah-walkthrough = "aah_api.__walkthrough__:main"
