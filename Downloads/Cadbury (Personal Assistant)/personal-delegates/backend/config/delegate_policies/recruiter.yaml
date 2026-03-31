@@ -1,0 +1,54 @@
+version: 1
+delegate_id: recruiter
+
+risk_boundary:
+  max_financial_commitment: 0.0        # recruiter delegate never commits money
+  max_calendar_commitment_hours: 1.0   # can suggest but not book without approval
+  max_autonomy_score: 0.55             # MVP: all actions require human approval
+
+thresholds:
+  min_score_for_engagement: 0.65       # >= 0.65 → draft engage reply
+  auto_decline_below: 0.30             # < 0.30  → draft polite decline
+  # between 0.30 and 0.65             → draft hold/request-info reply
+
+allowed_actions:
+  - action: read_email
+    action_label: Read email
+    auto_approve: true
+    zone: auto
+
+  - action: extract_opportunity
+    action_label: Extract job details
+    auto_approve: true
+    zone: auto
+
+  - action: score_opportunity
+    action_label: Score opportunity
+    auto_approve: true
+    zone: auto
+
+  - action: send_polite_decline
+    action_label: Send polite decline
+    auto_approve: false     # Phase 2: set to true for score < auto_decline_below
+    zone: review
+
+  - action: send_hold_response
+    action_label: Request more info
+    auto_approve: false
+    zone: review
+
+  - action: send_engagement_reply
+    action_label: Send engagement reply
+    auto_approve: false
+    zone: review
+
+  - action: book_calendar_slot
+    action_label: Book calendar slot
+    auto_approve: false
+    zone: review
+
+approval_required_for:
+  - send_polite_decline
+  - send_hold_response
+  - send_engagement_reply
+  - book_calendar_slot
