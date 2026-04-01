@@ -74,8 +74,9 @@ ApprovalQueue → FastAPI + SSE → Next.js frontend
 personal-delegates/
 ├── backend/
 │   ├── delegates/recruiter/
-│   │   ├── pipeline.py        # 6-stage pipeline
+│   │   ├── pipeline.py        # 6-stage pipeline (all stages live)
 │   │   ├── scorer.py          # Pure Python opportunity scorer
+│   │   ├── drafter.py         # Response drafter (engage/hold/decline)
 │   │   └── prompts/           # LLM prompts (extract, score, draft)
 │   ├── policy/
 │   │   ├── engine.py          # PolicyEngine → TrustZone (auto/review/block)
@@ -89,18 +90,20 @@ personal-delegates/
 │   │   ├── models.py          # CareerGoals, JobOpportunity, DecisionLog...
 │   │   └── graph.py           # SQLite persistence + MemoryGraph class
 │   ├── api/routes/            # FastAPI routes (goals, approvals, delegates, events)
-│   └── runtime/               # Event bus (SSE pub/sub), delegate kernel
+│   └── runtime/               # Asyncio polling scheduler, event bus (SSE pub/sub), delegate kernel
 │
 ├── frontend/
 │   ├── src/app/               # Next.js App Router pages
 │   │   ├── page.tsx           # Dashboard
-│   │   ├── goals/             # Goals Editor (fully wired)
-│   │   ├── approvals/         # Approval Inbox (stub → Week 3)
+│   │   ├── goals/             # Goals Editor (fully wired, auto-save)
+│   │   ├── approvals/         # Approval Inbox (fully wired — split view, keyboard shortcuts, optimistic updates)
 │   │   └── delegates/[id]/    # Delegate detail + policy view
 │   ├── src/components/
+│   │   ├── approvals/         # ApprovalCard, ApprovalDetail, DraftEditor, ApprovalActions
 │   │   ├── goals/             # GoalSection, TagInput, GoalsSidebar
 │   │   ├── layout/            # AppShell, Sidebar, Topbar
-│   │   └── scoring/           # ScoreBadge, MatchBreakdown
+│   │   ├── scoring/           # ScoreBadge, MatchBreakdown
+│   │   └── shared/            # CommandPalette (Cmd+K), ConnectionBanner, EmptyState, StatusPill
 │   └── src/stores/            # Zustand: events, approvals, goals, UI
 │
 ├── docker-compose.yml          # Redis + backend + frontend
@@ -129,11 +132,21 @@ npm run dev
 **Trigger the recruiter pipeline (no OpenAI key needed):**
 ```bash
 curl -X POST http://localhost:8000/v1/delegates/recruiter/run
-# → processes 3 mock recruiter emails, scores them, stores results
+# → processes 3 mock recruiter emails, scores them, creates approval items
 
-curl http://localhost:8000/v1/memory/opportunities  # scored opportunities
-curl http://localhost:8000/v1/events                # full event trace
+curl http://localhost:8000/v1/approvals              # pending approval items
+curl http://localhost:8000/v1/memory/opportunities   # scored opportunities
+curl http://localhost:8000/v1/events                 # full event trace
 ```
+
+The background scheduler also runs the pipeline automatically every 15 minutes (configurable via `EMAIL_POLL_INTERVAL_SECONDS` in `.env`).
+
+**Open the Approval Inbox:**
+- Go to `http://localhost:3000/approvals`
+- Each card shows: company, role, `ScoreBadge`, comp, location, draft reply
+- Keyboard shortcuts: `j`/`k` navigate · `a` approve · `r` reject · `e` edit draft · `s` skip · `⌘↵` approve + advance
+- Optimistic updates with 5-second undo toasts
+- `Cmd+K` opens the command palette (nav + pending approvals search)
 
 **Set your career goals:**
 - Open `http://localhost:3000/goals`
@@ -161,10 +174,10 @@ This is not a chat interface. The moat compounds over time:
 |------|--------|-------|
 | 1 | ✅ Done | Scaffold: FastAPI, Next.js, SQLite, SSE, Zustand stores, all route stubs |
 | 2 | ✅ Done | Recruiter pipeline Stages 1–3, scorer, policy engine, Goals Editor UI |
-| 3 | 🔲 Next | Stages 4–6 (Policy gate, Draft, Act), Approval Inbox UI |
-| 4 | 🔲 | ApprovalCard, DraftEditor, keyboard shortcuts, optimistic updates |
-| 5 | 🔲 | Dashboard, Delegate Detail, PipelineVisualizer, Trust Thermostat |
-| 6 | 🔲 | Docker e2e, MS Graph email integration, decision memory search |
+| 3 | ✅ Done | Stages 4–6 (Policy gate, Draft, Act), asyncio polling scheduler |
+| 4 | ✅ Done | ApprovalCard, DraftEditor, ApprovalActions, full Approval Inbox, Cmd+K palette |
+| 5 | 🔲 Next | Dashboard live data, Delegate Detail, PipelineVisualizer, Trust Thermostat |
+| 6 | 🔲 | Docker e2e, Opportunity Detail, ConnectionBanner, decision memory search |
 
 ---
 

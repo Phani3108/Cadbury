@@ -72,7 +72,9 @@ class RecruiterPipeline:
         await self._stage_1_ingest(ctx)
         await self._stage_2_extract(ctx)
         await self._stage_3_score(ctx)
-        # Stages 4-6 in Week 3
+        await self._stage_4_policy(ctx)
+        await self._stage_5_draft(ctx)
+        await self._stage_6_act(ctx)
         return ctx
 
     # ─── Stage 1: INGEST ──────────────────────────────────────────────────────
@@ -231,6 +233,199 @@ class RecruiterPipeline:
             if self.event_bus:
                 await self.event_bus.publish_event(event)
             ctx.emit(event)
+
+
+    # ─── Stage 4: POLICY CHECK ────────────────────────────────────────────────
+
+    async def _stage_4_policy(self, ctx: PipelineContext) -> None:
+        """
+        Run PolicyEngine against each opportunity to determine response type.
+        Blocks opportunities that fall below the hard block threshold via policy;
+        tags the rest with a response_type ('engage' | 'hold' | 'decline').
+        """
+        if not ctx.opportunities:
+            return
+
+        from policy.engine import PolicyEngine
+        engine = PolicyEngine("recruiter")
+
+        for opportunity in ctx.opportunities:
+            score = opportunity.match_score
+            response_type = engine.get_response_type(score)
+            zone = engine.check("send_engagement_reply" if response_type == "engage" else "send_polite_decline", score)
+
+            rules_checked = [
+                f"min_score_for_engagement:{engine.policy.thresholds.min_score_for_engagement}",
+                f"auto_decline_below:{engine.policy.thresholds.auto_decline_below}",
+                f"zone:{zone}",
+            ]
+
+            if zone == "block":
+                opportunity.status = OpportunityStatus.REJECTED
+                await self.graph.save_opportunity(opportunity)
+
+                event = DelegateEvent(
+                    delegate_id="recruiter",
+                    event_type=EventType.POLICY_BLOCKED,
+                    trace_id=ctx.trace_id,
+                    summary=f"Policy blocked: {opportunity.company} — score {score:.0%}",
+                    payload={
+                        "opportunity_id": opportunity.opportunity_id,
+                        "score": score,
+                        "response_type": response_type,
+                        "zone": zone,
+                    },
+                    policy_rules_checked=rules_checked,
+                )
+                await self.graph.save_event(event)
+                if self.event_bus:
+                    await self.event_bus.publish_event(event)
+                ctx.emit(event)
+                continue
+
+            # Tag for downstream stages (store on context via a side dict)
+            ctx._opportunity_response_types = getattr(ctx, "_opportunity_response_types", {})
+            ctx._opportunity_response_types[opportunity.opportunity_id] = response_type
+            ctx._opportunity_rules = getattr(ctx, "_opportunity_rules", {})
+            ctx._opportunity_rules[opportunity.opportunity_id] = rules_checked
+
+    # ─── Stage 5: DRAFT ───────────────────────────────────────────────────────
+
+    async def _stage_5_draft(self, ctx: PipelineContext) -> None:
+        """Generate a draft email reply for each non-blocked opportunity."""
+        if not ctx.opportunities:
+            return
+
+        response_types = getattr(ctx, "_opportunity_response_types", {})
+        if not response_types:
+            return
+
+        goals = await self.graph.get_career_goals()
+        if goals is None:
+            from memory.models import CareerGoals as _CG
+            goals = _CG()
+
+        from delegates.recruiter import drafter
+
+        for opportunity in ctx.opportunities:
+            response_type = response_types.get(opportunity.opportunity_id)
+            if response_type is None:
+                continue  # blocked — skip
+
+            try:
+                draft_text = await drafter.draft_response(
+                    response_type=response_type,
+                    opportunity=opportunity,
+                    goals=goals,
+                    email_body="",  # full body not stored yet; included in Phase 2 MS Graph integration
+                    llm_enabled=self.llm_enabled,
+                )
+            except Exception as exc:
+                ctx.errors.append(f"Draft failed for {opportunity.opportunity_id}: {exc}")
+                draft_text = ""
+
+            opportunity.status = OpportunityStatus.DRAFT_CREATED
+            await self.graph.save_opportunity(opportunity)
+
+            event = DelegateEvent(
+                delegate_id="recruiter",
+                event_type=EventType.DRAFT_CREATED,
+                trace_id=ctx.trace_id,
+                summary=f"Draft {response_type} for {opportunity.company} — {opportunity.role}",
+                payload={
+                    "opportunity_id": opportunity.opportunity_id,
+                    "response_type": response_type,
+                    "draft_preview": draft_text[:120] + "…" if len(draft_text) > 120 else draft_text,
+                },
+            )
+            await self.graph.save_event(event)
+            if self.event_bus:
+                await self.event_bus.publish_event(event)
+            ctx.emit(event)
+
+            # Stash draft text for Stage 6
+            ctx._opportunity_drafts = getattr(ctx, "_opportunity_drafts", {})
+            ctx._opportunity_drafts[opportunity.opportunity_id] = draft_text
+
+    # ─── Stage 6: ACT (Human-in-the-Loop gate) ────────────────────────────────
+
+    async def _stage_6_act(self, ctx: PipelineContext) -> None:
+        """
+        Create ApprovalItem for every drafted opportunity.
+        All actions require human approval in MVP.
+        """
+        if not ctx.opportunities:
+            return
+
+        response_types = getattr(ctx, "_opportunity_response_types", {})
+        drafts = getattr(ctx, "_opportunity_drafts", {})
+        rules_map = getattr(ctx, "_opportunity_rules", {})
+
+        if not response_types:
+            return
+
+        for opportunity in ctx.opportunities:
+            response_type = response_types.get(opportunity.opportunity_id)
+            if response_type is None:
+                continue
+
+            draft_text = drafts.get(opportunity.opportunity_id, "")
+            rules_checked = rules_map.get(opportunity.opportunity_id, [])
+
+            action_labels = {
+                "engage": "Send engagement reply",
+                "hold": "Send hold reply (more info requested)",
+                "decline": "Send polite decline",
+            }
+
+            from memory.models import ApprovalItem as _AI
+            approval = _AI(
+                delegate_id="recruiter",
+                event_id=ctx.events_emitted[-1].event_id if ctx.events_emitted else "",
+                opportunity_id=opportunity.opportunity_id,
+                action=f"send_{response_type}_reply",
+                action_label=action_labels.get(response_type, "Send reply"),
+                context_summary=(
+                    f"{opportunity.company} · {opportunity.role} · "
+                    f"{opportunity.location} · {opportunity.match_score:.0%} match"
+                ),
+                draft_content=draft_text,
+                risk_score=1.0 - opportunity.match_score,
+                reasoning=(
+                    f"Score {opportunity.match_score:.0%} → response type '{response_type}'. "
+                    f"Policy rules: {', '.join(rules_checked)}"
+                ),
+                policy_check={
+                    "rules_checked": rules_checked,
+                    "response_type": response_type,
+                    "match_score": opportunity.match_score,
+                    "match_breakdown": opportunity.match_breakdown.model_dump(),
+                },
+            )
+            await self.graph.save_approval(approval)
+
+            opportunity.status = OpportunityStatus.APPROVAL_PENDING
+            await self.graph.save_opportunity(opportunity)
+
+            event = DelegateEvent(
+                delegate_id="recruiter",
+                event_type=EventType.APPROVAL_REQUESTED,
+                trace_id=ctx.trace_id,
+                summary=f"Approval needed: {action_labels.get(response_type, 'Send reply')} — {opportunity.company}",
+                payload={
+                    "approval_id": approval.approval_id,
+                    "opportunity_id": opportunity.opportunity_id,
+                    "response_type": response_type,
+                    "action_label": approval.action_label,
+                },
+                requires_approval=True,
+                policy_rules_checked=rules_checked,
+            )
+            await self.graph.save_event(event)
+            if self.event_bus:
+                await self.event_bus.publish_event(event)
+            ctx.emit(event)
+
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────

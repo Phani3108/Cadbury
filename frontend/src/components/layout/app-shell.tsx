@@ -3,6 +3,7 @@
 import { useUIStore } from "@/stores/ui-store";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
+import { CommandPalette } from "@/components/shared/command-palette";
 import { cn } from "@/lib/utils";
 
 interface AppShellProps {
@@ -26,6 +27,7 @@ export function AppShell({ children }: AppShellProps) {
           {children}
         </main>
       </div>
+      <CommandPalette />
     </div>
   );
 }
