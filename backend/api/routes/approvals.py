@@ -15,7 +15,7 @@ from memory.models import (
     EventType,
     DecisionLog,
 )
-from runtime.event_bus import publish_event
+from runtime.event_bus import publish_event, publish_typed_event
 
 router = APIRouter(prefix="/v1/approvals", tags=["approvals"])
 
@@ -59,6 +59,7 @@ async def approve_item(approval_id: str, action: ApprovalAction = ApprovalAction
     )
     await save_event(event)
     await publish_event(event)
+    await publish_typed_event("approval.resolved", {"approval_id": approval_id, "status": "approved"})
 
     # Log decision
     await log_decision(DecisionLog(
@@ -93,6 +94,7 @@ async def reject_item(approval_id: str, action: ApprovalAction = ApprovalAction(
     )
     await save_event(event)
     await publish_event(event)
+    await publish_typed_event("approval.resolved", {"approval_id": approval_id, "status": "rejected"})
 
     await log_decision(DecisionLog(
         delegate_id=item.delegate_id,

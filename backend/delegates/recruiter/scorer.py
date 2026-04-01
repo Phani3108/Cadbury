@@ -4,10 +4,14 @@ from __future__ import annotations
 from memory.models import CareerGoals, JobOpportunity, MatchBreakdown, RemotePolicy, WorkStyle
 
 # Scoring weights (must sum to 1.0)
-W_COMP = 0.35
-W_ROLE = 0.30
-W_LOCATION = 0.20
-W_CRITERIA = 0.15
+W_COMP = 0.32
+W_ROLE = 0.27
+W_LOCATION = 0.18
+W_CRITERIA = 0.13
+W_COMPANY = 0.10
+
+# Stage keywords ordered roughly from earliest to latest
+_STAGE_ORDER = ["pre-seed", "seed", "series a", "series b", "series c", "series d", "pre-ipo", "public", "ipo", "enterprise"]
 
 
 def score_comp(opportunity: JobOpportunity, goals: CareerGoals) -> float:
@@ -118,6 +122,47 @@ def score_criteria(opportunity: JobOpportunity, goals: CareerGoals) -> float:
     return hits / len(goals.must_have_criteria)
 
 
+def score_company(opportunity: JobOpportunity, goals: CareerGoals) -> float:
+    """Score company fit based on avoid list, preferred stages, and preferred industries."""
+    company_lower = (opportunity.company or "").lower()
+    text = f"{opportunity.jd_summary or ''} {opportunity.role or ''}".lower()
+
+    # Hard block: company is explicitly avoided
+    for avoid in goals.avoid_companies:
+        if avoid.lower() in company_lower or company_lower in avoid.lower():
+            return 0.0
+
+    has_stage_pref = bool(goals.company_stages)
+    has_industry_pref = bool(goals.preferred_industries)
+
+    if not has_stage_pref and not has_industry_pref:
+        return 0.5  # no preferences — neutral
+
+    stage_score = 0.5
+    if has_stage_pref:
+        # Detect stage in JD text
+        for stage in goals.company_stages:
+            if stage.lower() in text or stage.lower() in company_lower:
+                stage_score = 1.0
+                break
+        else:
+            # No preferred stage found — mild penalty
+            stage_score = 0.3
+
+    industry_score = 0.5
+    if has_industry_pref:
+        for industry in goals.preferred_industries:
+            if industry.lower() in text or industry.lower() in company_lower:
+                industry_score = 1.0
+                break
+        else:
+            industry_score = 0.3
+
+    if has_stage_pref and has_industry_pref:
+        return (stage_score + industry_score) / 2
+    return stage_score if has_stage_pref else industry_score
+
+
 def score(opportunity: JobOpportunity, goals: CareerGoals) -> tuple[float, MatchBreakdown]:
     """
     Score a job opportunity against career goals.
@@ -127,22 +172,28 @@ def score(opportunity: JobOpportunity, goals: CareerGoals) -> tuple[float, Match
     Returns:
         (overall_score, breakdown) where overall_score is 0.0–1.0
     """
-    # Check dealbreakers first — hard block
+    # Check dealbreakers and avoid_companies first — hard block
     text = f"{opportunity.role} {opportunity.jd_summary or ''} {opportunity.company or ''}".lower()
     for db in goals.dealbreakers:
         if db.lower() in text:
+            return 0.0, MatchBreakdown(role=0.0, comp=0.0, location=0.0, criteria=0.0, company=0.0)
+    company_lower = (opportunity.company or "").lower()
+    for avoid in goals.avoid_companies:
+        if avoid.lower() in company_lower or company_lower in avoid.lower():
             return 0.0, MatchBreakdown(role=0.0, comp=0.0, location=0.0, criteria=0.0, company=0.0)
 
     comp = score_comp(opportunity, goals)
     role = score_role(opportunity, goals)
     location = score_location(opportunity, goals)
     criteria = score_criteria(opportunity, goals)
+    company = score_company(opportunity, goals)
 
     overall = (
         W_COMP * comp
         + W_ROLE * role
         + W_LOCATION * location
         + W_CRITERIA * criteria
+        + W_COMPANY * company
     )
 
     breakdown = MatchBreakdown(
@@ -150,7 +201,7 @@ def score(opportunity: JobOpportunity, goals: CareerGoals) -> tuple[float, Match
         comp=round(comp, 3),
         location=round(location, 3),
         criteria=round(criteria, 3),
-        company=0.5,  # placeholder — company scoring in Phase 2
+        company=round(company, 3),
     )
 
     return round(overall, 3), breakdown

@@ -7,6 +7,7 @@ import type {
   DelegationPolicy,
   PolicyImpact,
   DelegateEvent,
+  PatternInsight,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -67,6 +68,11 @@ export const approvals = {
 export const opportunities = {
   list: () => request<JobOpportunity[]>("/v1/memory/opportunities"),
   get: (id: string) => request<JobOpportunity>(`/v1/memory/opportunities/${id}`),
+  batch: (ids: string[]) => {
+    if (!ids.length) return Promise.resolve({} as Record<string, JobOpportunity>);
+    const qs = ids.map((id) => `ids=${encodeURIComponent(id)}`).join("&");
+    return request<Record<string, JobOpportunity>>(`/v1/memory/opportunities/batch?${qs}`);
+  },
 };
 
 // ─── Goals ────────────────────────────────────────────────────────────────────
@@ -105,6 +111,13 @@ export const policy = {
     }),
 };
 
+// ─── Learning ─────────────────────────────────────────────────────────────────
+
+export const learning = {
+  patterns: (delegateId: string) =>
+    request<PatternInsight[]>(`/v1/delegates/${delegateId}/learning/patterns`),
+};
+
 // ─── Bundled export ───────────────────────────────────────────────────────────
 
-export const api = { delegates, approvals, opportunities, goals, events, policy };
+export const api = { delegates, approvals, opportunities, goals, events, policy, learning };

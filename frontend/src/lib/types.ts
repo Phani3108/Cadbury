@@ -182,6 +182,15 @@ export interface PolicyImpact {
   estimated_time_saved_hours: number;
 }
 
+// ─── Learning Patterns ────────────────────────────────────────────────────────
+
+export interface PatternInsight {
+  label: string;
+  description: string;
+  confidence: number; // 0-1
+  evidence: number;   // sample count
+}
+
 // ─── Real-time / SSE ──────────────────────────────────────────────────────────
 
 export type ConnectionStatus = "connected" | "reconnecting" | "disconnected";

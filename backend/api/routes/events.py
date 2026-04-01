@@ -26,11 +26,19 @@ async def stream_events(delegate_id: str | None = None):
             yield "event: connected\ndata: {}\n\n"
             while True:
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
-                    if delegate_id and event.get("delegate_id") != delegate_id:
+                    item = await asyncio.wait_for(queue.get(), timeout=30.0)
+
+                    # Typed SSE events (e.g. approval.new, approval.resolved)
+                    if "__sse_type__" in item:
+                        sse_type = item["__sse_type__"]
+                        data = json.dumps(item["__data__"])
+                        yield f"event: {sse_type}\ndata: {data}\n\n"
                         continue
-                    event_type = event.get("event_type", "delegate.event")
-                    data = json.dumps(event)
+
+                    # Regular DelegateEvent — filter by delegate if requested
+                    if delegate_id and item.get("delegate_id") != delegate_id:
+                        continue
+                    data = json.dumps(item)
                     yield f"event: delegate.event\ndata: {data}\n\n"
                 except asyncio.TimeoutError:
                     # Send heartbeat every 30s to keep connection alive

@@ -424,8 +424,11 @@ class RecruiterPipeline:
             await self.graph.save_event(event)
             if self.event_bus:
                 await self.event_bus.publish_event(event)
+                # Also emit typed SSE event so the frontend approval inbox updates in real-time
+                await self.event_bus.publish_typed_event(
+                    "approval.new", approval.model_dump(mode="json")
+                )
             ctx.emit(event)
-
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────

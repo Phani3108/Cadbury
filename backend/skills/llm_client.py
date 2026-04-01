@@ -15,7 +15,11 @@ def _get_client() -> AsyncOpenAI:
     global _client
     if _client is None:
         settings = get_settings()
-        _client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        if not settings.openai_api_key:
+            raise ValueError(
+                "OPENAI_API_KEY is not set. Set it in backend/.env to enable LLM features."
+            )
+        _client = AsyncOpenAI(api_key=settings.openai_api_key)
     return _client
 
 

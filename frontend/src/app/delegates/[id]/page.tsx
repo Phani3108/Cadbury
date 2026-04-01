@@ -29,6 +29,7 @@ export default function DelegateDetailPage({
 
   const [delegate, setDelegate] = useState<Delegate | undefined>(undefined);
   const [events, setEvents] = useState<DelegateEvent[]>([]);
+  const [patterns, setPatterns] = useState<import("@/lib/types").PatternInsight[]>([]);
   const [displayLimit, setDisplayLimit] = useState(20);
   const [loading, setLoading] = useState(true);
   const [activeStage, setActiveStage] = useState<string | undefined>(undefined);
@@ -36,12 +37,14 @@ export default function DelegateDetailPage({
   const { events: liveEvents } = useEventStore();
 
   const fetchData = useCallback(async () => {
-    const [del, evts] = await Promise.all([
+    const [del, evts, pats] = await Promise.all([
       delegatesApi.get(delegateId).catch(() => undefined),
       eventsApi.list(delegateId, 100).catch(() => []),
+      import("@/lib/api").then(({ learning }) => learning.patterns(delegateId)).catch(() => []),
     ]);
     setDelegate(del);
     setEvents(evts as DelegateEvent[]);
+    setPatterns(pats as import("@/lib/types").PatternInsight[]);
     setLoading(false);
   }, [delegateId]);
 
@@ -188,7 +191,7 @@ export default function DelegateDetailPage({
             <h2 className="text-sm font-semibold text-slate-900">Learning & Patterns</h2>
           </div>
           <div className="bg-white border border-slate-200 rounded-lg p-4">
-            <LearningPanel events={allEvents} stats={stats} />
+            <LearningPanel events={allEvents} stats={stats} patterns={patterns} />
           </div>
         </div>
       </div>

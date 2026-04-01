@@ -2,7 +2,7 @@
 
 import { Sparkles, TrendingUp, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { DelegateEvent } from "@/lib/types";
+import type { DelegateEvent, PatternInsight } from "@/lib/types";
 
 interface Pattern {
   label: string;
@@ -67,11 +67,15 @@ interface LearningPanelProps {
     auto_rate: number;
     avg_score: number;
   };
+  patterns?: PatternInsight[];
   className?: string;
 }
 
-export function LearningPanel({ events, stats, className }: LearningPanelProps) {
-  const patterns = derivePatterns(events);
+export function LearningPanel({ events, stats, patterns: backendPatterns, className }: LearningPanelProps) {
+  // Prefer backend-computed patterns; fall back to client-side derivation
+  const patterns = backendPatterns && backendPatterns.length > 0
+    ? backendPatterns
+    : derivePatterns(events);
 
   const autoCount = Math.round(stats.auto_rate * stats.processed_today);
   const reviewCount = stats.processed_today - autoCount;

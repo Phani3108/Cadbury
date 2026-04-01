@@ -78,7 +78,7 @@ class DelegateRuntime:
                         email_provider=MockEmailProvider(),
                         graph=MemoryGraph(),
                         event_bus=get_event_bus(),
-                        llm_enabled=False,
+                        llm_enabled=bool(settings.openai_api_key),
                     )
                     ctx = await pipeline.run()
                     logger.info(

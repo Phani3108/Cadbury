@@ -157,6 +157,103 @@ async def get_policy_impact(delegate_id: str):
     )
 
 
+# ─── Learning patterns endpoint ────────────────────────────────────────────────
+
+class PatternInsight(BaseModel):
+    label: str
+    description: str
+    confidence: float  # 0-1
+    evidence: int      # sample count
+
+
+@router.get("/{delegate_id}/learning/patterns", response_model=list[PatternInsight])
+async def get_learning_patterns(delegate_id: str):
+    """Derive behavioral patterns from decision log and opportunity history."""
+    from memory.graph import list_decisions, list_opportunities, list_approvals as _la
+    from memory.models import ApprovalStatus as AS
+
+    decisions = await list_decisions(delegate_id, 500)
+    opps = await list_opportunities(500)
+    pending = await _la(AS.PENDING)
+
+    human_approved = [d for d in decisions if d.human_approved is True]
+    human_rejected = [d for d in decisions if d.human_approved is False]
+    auto_acted = [d for d in decisions if d.human_approved is None]
+    scored = [o for o in opps if o.match_score > 0]
+
+    patterns: list[PatternInsight] = []
+
+    # Pattern: consistent rejections → delegate learning standards
+    if len(human_rejected) >= 2:
+        patterns.append(PatternInsight(
+            label="Rejection pattern active",
+            description=(
+                f"{len(human_rejected)} opportunities rejected — delegate is calibrating "
+                "to your quality bar"
+            ),
+            confidence=min(0.4 + len(human_rejected) * 0.08, 0.90),
+            evidence=len(human_rejected),
+        ))
+
+    # Pattern: approvals → delegate knows what good looks like
+    if len(human_approved) >= 1:
+        patterns.append(PatternInsight(
+            label="Approval signal established",
+            description=(
+                f"{len(human_approved)} item{'' if len(human_approved) == 1 else 's'} approved — "
+                "delegate is learning what high-quality looks like"
+            ),
+            confidence=min(0.5 + len(human_approved) * 0.10, 0.95),
+            evidence=len(human_approved),
+        ))
+
+    # Pattern: scoring volume → model reliability
+    if len(scored) >= 5:
+        avg = sum(o.match_score for o in scored) / len(scored)
+        patterns.append(PatternInsight(
+            label="Scoring model reliable",
+            description=(
+                f"{len(scored)} opportunities scored, avg match {avg:.0%} — "
+                "scoring is consistent enough to trust"
+            ),
+            confidence=min(0.60 + len(scored) * 0.015, 0.95),
+            evidence=len(scored),
+        ))
+
+    # Pattern: score drift — if approved opps have low scores, threshold may be too high
+    approved_opps = [
+        o for o in opps
+        if any(d.action_taken.startswith("approved") and o.opportunity_id in d.action_taken
+               for d in human_approved)
+    ]
+    if len(approved_opps) >= 3:
+        avg_approved_score = sum(o.match_score for o in approved_opps) / len(approved_opps)
+        if avg_approved_score < 0.55:
+            patterns.append(PatternInsight(
+                label="Score threshold may be high",
+                description=(
+                    f"Approved opportunities avg {avg_approved_score:.0%} match — "
+                    "consider lowering engagement threshold in policy"
+                ),
+                confidence=0.70,
+                evidence=len(approved_opps),
+            ))
+
+    # Pattern: pending backlog building up
+    if len(pending) >= 3:
+        patterns.append(PatternInsight(
+            label="Approval backlog growing",
+            description=(
+                f"{len(pending)} items waiting for review — consider enabling "
+                "auto-decline for low scores to reduce queue"
+            ),
+            confidence=0.99,
+            evidence=len(pending),
+        ))
+
+    return patterns
+
+
 # ─── Manual pipeline trigger ───────────────────────────────────────────────────
 
 class RunResult(BaseModel):
@@ -173,11 +270,12 @@ async def run_recruiter_pipeline():
     from delegates.recruiter.pipeline import RecruiterPipeline
     from skills.email.mock import MockEmailProvider
 
+    from config.settings import settings
     pipeline = RecruiterPipeline(
         email_provider=MockEmailProvider(),
         graph=MemoryGraph(),
         event_bus=get_event_bus(),
-        llm_enabled=False,
+        llm_enabled=bool(settings.openai_api_key),
     )
     ctx = await pipeline.run()
     return RunResult(

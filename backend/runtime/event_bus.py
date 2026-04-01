@@ -38,10 +38,26 @@ async def publish_event(event: "DelegateEvent") -> None:
         unsubscribe(token)
 
 
+async def publish_typed_event(sse_type: str, data: dict) -> None:
+    """Broadcast a typed SSE event (e.g. 'approval.new') to all subscribers."""
+    envelope = {"__sse_type__": sse_type, "__data__": data}
+    dead = []
+    for token, queue in _subscribers.items():
+        try:
+            queue.put_nowait(envelope)
+        except asyncio.QueueFull:
+            dead.append(token)
+    for token in dead:
+        unsubscribe(token)
+
+
 class _EventBusSingleton:
     """Class wrapper so the pipeline can call bus.publish_event(event)."""
     async def publish_event(self, event: "DelegateEvent") -> None:
         await publish_event(event)
+
+    async def publish_typed_event(self, sse_type: str, data: dict) -> None:
+        await publish_typed_event(sse_type, data)
 
     def subscribe(self, queue: asyncio.Queue) -> str:
         return subscribe(queue)

@@ -45,30 +45,22 @@ export default function ApprovalsPage() {
   const [toasts, setToasts] = useState<UndoToast[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Enrich approvals with opportunity data
-  const [oppCache, setOppCache] = useState<Record<string, JobOpportunity>>({});
-
   const fetchApprovals = useCallback(async () => {
     try {
       const items = await approvalsApi.list();
-      // Fetch opp data for each item that has an opportunity_id
+      // Batch-fetch all opportunity data in a single request
       const oppIds = [...new Set(items.flatMap((a) => (a.opportunity_id ? [a.opportunity_id] : [])))];
-      const newCache: Record<string, JobOpportunity> = { ...oppCache };
-      await Promise.all(
-        oppIds
-          .filter((id) => !newCache[id])
-          .map(async (id) => {
-            try {
-              newCache[id] = await oppsApi.get(id);
-            } catch {
-              // ignore — opp just won't be enriched
-            }
-          })
-      );
-      setOppCache(newCache);
+      let oppMap: Record<string, JobOpportunity> = {};
+      if (oppIds.length > 0) {
+        try {
+          oppMap = await oppsApi.batch(oppIds);
+        } catch {
+          // batch failed — proceed without enrichment
+        }
+      }
       const enriched = items.map((a) => ({
         ...a,
-        opportunity: a.opportunity_id ? newCache[a.opportunity_id] : undefined,
+        opportunity: a.opportunity_id ? oppMap[a.opportunity_id] : undefined,
       }));
       setApprovals(enriched as ApprovalItem[]);
     } finally {

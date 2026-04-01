@@ -210,6 +210,21 @@ async def get_opportunity(opportunity_id: str) -> Optional[JobOpportunity]:
         return None
 
 
+async def get_opportunities_batch(ids: list[str]) -> dict[str, JobOpportunity]:
+    if not ids:
+        return {}
+    placeholders = ",".join("?" * len(ids))
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            f"SELECT data FROM job_opportunities WHERE opportunity_id IN ({placeholders})",
+            ids,
+        )
+    return {
+        opp.opportunity_id: opp
+        for opp in (JobOpportunity.model_validate_json(r["data"]) for r in rows)
+    }
+
+
 # ─── Approval Items ───────────────────────────────────────────────────────────
 
 async def save_approval(item: ApprovalItem) -> ApprovalItem:
