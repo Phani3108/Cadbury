@@ -146,7 +146,13 @@ The background scheduler also runs the pipeline automatically every 15 minutes (
 - Each card shows: company, role, `ScoreBadge`, comp, location, draft reply
 - Keyboard shortcuts: `j`/`k` navigate · `a` approve · `r` reject · `e` edit draft · `s` skip · `⌘↵` approve + advance
 - Optimistic updates with 5-second undo toasts
-- `Cmd+K` opens the command palette (nav + pending approvals search)
+- `Cmd+K` opens the command palette (nav + pending approvals + decision memory search)
+
+**Explore opportunities & policy:**
+- `http://localhost:3000/opportunities` — live list of all scored opportunities
+- `http://localhost:3000/opportunities/<id>` — detail: MatchBreakdown + decision trail
+- `http://localhost:3000/delegates/recruiter` — PipelineVisualizer, Timeline, LearningPanel
+- `http://localhost:3000/delegates/recruiter/policy` — TrustThermostat + RuleCards + PolicyImpact
 
 **Set your career goals:**
 - Open `http://localhost:3000/goals`
@@ -176,8 +182,8 @@ This is not a chat interface. The moat compounds over time:
 | 2 | ✅ Done | Recruiter pipeline Stages 1–3, scorer, policy engine, Goals Editor UI |
 | 3 | ✅ Done | Stages 4–6 (Policy gate, Draft, Act), asyncio polling scheduler |
 | 4 | ✅ Done | ApprovalCard, DraftEditor, ApprovalActions, full Approval Inbox, Cmd+K palette |
-| 5 | 🔲 Next | Dashboard live data, Delegate Detail, PipelineVisualizer, Trust Thermostat |
-| 6 | 🔲 | Docker e2e, Opportunity Detail, ConnectionBanner, decision memory search |
+| 5 | ✅ Done | Dashboard live data, Delegate Detail (PipelineVisualizer, Timeline, LearningPanel), Policy page (TrustThermostat, RuleCards, PolicyImpact) |
+| 6 | ✅ Done | Opportunity list + detail pages, ConnectionBanner, decision memory search in Cmd+K, Docker health checks |
 
 ---
 

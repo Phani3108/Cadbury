@@ -1,5 +1,6 @@
 "use client";
 
+import { ConnectionBanner } from "@/components/shared/connection-banner";
 import { useUIStore } from "@/stores/ui-store";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
@@ -15,6 +16,7 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <ConnectionBanner />
       <Sidebar />
       <div
         className={cn(

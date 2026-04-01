@@ -1,8 +1,10 @@
 import { Check, X, Clock, CheckCheck, AlertTriangle, ShieldCheck, ShieldAlert, ShieldX } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ApprovalStatus, TrustZone } from "@/lib/types";
 
-type PillVariant = ApprovalStatus | TrustZone | "active" | "paused" | "error" | "draft";
+
+import type { ApprovalStatus, TrustZone, OpportunityStatus } from "@/lib/types";
+
+type PillVariant = ApprovalStatus | TrustZone | OpportunityStatus | "active" | "paused" | "error" | "draft" | "setup_required";
 
 const VARIANT_CONFIG: Record<PillVariant, {
   label: string;
@@ -68,6 +70,47 @@ const VARIANT_CONFIG: Record<PillVariant, {
     label: "Draft",
     icon: Clock,
     className: "bg-slate-50 text-slate-500 border-slate-200",
+  },
+  setup_required: {
+    label: "Setup",
+    icon: AlertTriangle,
+    className: "bg-amber-50 text-amber-600 border-amber-200",
+  },
+  // OpportunityStatus values
+  received: {
+    label: "Received",
+    icon: Clock,
+    className: "bg-slate-50 text-slate-500 border-slate-200",
+  },
+  extracted: {
+    label: "Extracted",
+    icon: Clock,
+    className: "bg-blue-50 text-blue-600 border-blue-200",
+  },
+  scored: {
+    label: "Scored",
+    icon: CheckCheck,
+    className: "bg-blue-50 text-blue-700 border-blue-200",
+  },
+  draft_created: {
+    label: "Draft ready",
+    icon: Clock,
+    className: "bg-amber-50 text-amber-600 border-amber-200",
+  },
+  approval_pending: {
+    label: "Approval pending",
+    icon: Clock,
+    className: "bg-amber-50 text-amber-700 border-amber-200",
+  },
+  responded: {
+    label: "Responded",
+    icon: CheckCheck,
+    className: "bg-green-50 text-green-700 border-green-200",
+  },
+  scheduled: {
+    label: "Scheduled",
+    icon: CheckCheck,
+    className: "bg-green-50 text-green-700 border-green-200",
   },
 };
 

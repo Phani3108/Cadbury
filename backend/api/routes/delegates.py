@@ -1,8 +1,11 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from runtime.kernel import get_runtime
-from memory.graph import MemoryGraph
+from memory.graph import MemoryGraph, list_approvals, list_decisions
+from memory.models import ApprovalStatus
 from runtime.event_bus import get_event_bus
+from policy.loader import load_policy
+from policy.models import DelegationPolicy
 
 router = APIRouter(prefix="/v1/delegates", tags=["delegates"])
 
@@ -35,8 +38,45 @@ DELEGATE_REGISTRY = [
 ]
 
 
+async def _get_recruiter_stats() -> DelegateStats:
+    """Compute live stats for the recruiter delegate."""
+    from datetime import datetime, timezone, timedelta
+    from memory.graph import list_opportunities, list_events
+
+    pending = await list_approvals(ApprovalStatus.PENDING)
+    opps = await list_opportunities(500)
+    today = datetime.now(timezone.utc).date()
+    events_today = [
+        e for e in await list_events("recruiter", 500)
+        if e.timestamp.date() == today
+    ]
+
+    scored = [o for o in opps if o.match_score > 0]
+    avg_score = sum(o.match_score for o in scored) / len(scored) if scored else 0.0
+
+    decisions = await list_decisions("recruiter", 500)
+    auto_count = sum(1 for d in decisions if not d.human_approved and d.action_taken.startswith("auto"))
+    auto_rate = auto_count / len(decisions) if decisions else 0.0
+
+    # "processed today" = distinct opportunities touched today
+    opp_ids_today = {
+        e.payload.get("opportunity_id")
+        for e in events_today
+        if e.payload.get("opportunity_id")
+    }
+
+    return DelegateStats(
+        processed_today=len(opp_ids_today),
+        pending_approvals=len(pending),
+        auto_rate=round(auto_rate, 3),
+        avg_score=round(avg_score, 3),
+    )
+
+
 @router.get("", response_model=list[DelegateInfo])
 async def list_delegates():
+    stats = await _get_recruiter_stats()
+    DELEGATE_REGISTRY[0].stats = stats
     return DELEGATE_REGISTRY
 
 
@@ -44,6 +84,8 @@ async def list_delegates():
 async def get_delegate(delegate_id: str):
     for d in DELEGATE_REGISTRY:
         if d.id == delegate_id:
+            if delegate_id == "recruiter":
+                d.stats = await _get_recruiter_stats()
             return d
     raise HTTPException(404, "Delegate not found")
 
@@ -64,6 +106,59 @@ async def resume_delegate(delegate_id: str):
     return {"status": "resumed", "delegate_id": delegate_id}
 
 
+# ─── Policy endpoints ──────────────────────────────────────────────────────────
+
+class PolicyImpact(BaseModel):
+    period_days: int = 30
+    total_processed: int = 0
+    auto_approved: int = 0
+    reviewed: int = 0
+    auto_rejected: int = 0
+    estimated_time_saved_hours: float = 0.0
+
+
+@router.get("/{delegate_id}/policy", response_model=DelegationPolicy)
+async def get_policy(delegate_id: str):
+    try:
+        return load_policy(delegate_id)
+    except FileNotFoundError:
+        raise HTTPException(404, f"No policy found for delegate '{delegate_id}'")
+
+
+@router.get("/{delegate_id}/policy/impact", response_model=PolicyImpact)
+async def get_policy_impact(delegate_id: str):
+    """Calculate what the historical approval distribution looks like."""
+    from memory.graph import list_approvals as _la, list_opportunities
+    from memory.models import ApprovalStatus as AS
+    from policy.engine import PolicyEngine
+
+    try:
+        engine = PolicyEngine(delegate_id)
+    except FileNotFoundError:
+        raise HTTPException(404, f"No policy found for delegate '{delegate_id}'")
+
+    opps = await list_opportunities(500)
+    thresholds = engine.policy.thresholds
+
+    auto_rejected = sum(1 for o in opps if o.match_score < thresholds.auto_decline_below)
+    would_engage = sum(1 for o in opps if o.match_score >= thresholds.min_score_for_engagement)
+    reviewed = len(opps) - auto_rejected
+
+    # ~5 min per review saved when auto-rejected
+    time_saved = auto_rejected * (5 / 60)
+
+    return PolicyImpact(
+        period_days=30,
+        total_processed=len(opps),
+        auto_approved=0,          # Phase 2 when auto_approve=true for declines
+        reviewed=reviewed,
+        auto_rejected=auto_rejected,
+        estimated_time_saved_hours=round(time_saved, 2),
+    )
+
+
+# ─── Manual pipeline trigger ───────────────────────────────────────────────────
+
 class RunResult(BaseModel):
     trace_id: str
     emails_ingested: int
@@ -82,7 +177,7 @@ async def run_recruiter_pipeline():
         email_provider=MockEmailProvider(),
         graph=MemoryGraph(),
         event_bus=get_event_bus(),
-        llm_enabled=False,  # Use mock extraction — no OpenAI key needed for demo
+        llm_enabled=False,
     )
     ctx = await pipeline.run()
     return RunResult(

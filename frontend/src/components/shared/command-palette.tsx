@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import {
@@ -12,9 +12,12 @@ import {
   Shield,
   Check,
   Search,
+  History,
 } from "lucide-react";
 import { useUIStore } from "@/stores/ui-store";
 import { useApprovalStore } from "@/stores/approval-store";
+import { api } from "@/lib/api";
+import type { JobOpportunity } from "@/lib/types";
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -33,8 +36,16 @@ export function CommandPalette() {
   const router = useRouter();
   const { commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
   const { approvals } = useApprovalStore();
+  const [opportunities, setOpportunities] = useState<JobOpportunity[]>([]);
 
   const pendingApprovals = approvals.filter((a) => a.status === "pending");
+
+  // Load opportunities lazily when palette opens
+  useEffect(() => {
+    if (commandPaletteOpen && opportunities.length === 0) {
+      api.opportunities.list().then(setOpportunities).catch(() => {});
+    }
+  }, [commandPaletteOpen, opportunities.length]);
 
   // Open on Cmd+K
   useEffect(() => {
@@ -75,7 +86,7 @@ export function CommandPalette() {
           <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100">
             <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
             <Command.Input
-              placeholder="Search pages, approvals…"
+              placeholder="Search pages, approvals, opportunities…"
               autoFocus
               className="flex-1 bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
             />
@@ -141,6 +152,33 @@ export function CommandPalette() {
                       </p>
                       <p className="text-xs text-slate-400 truncate">
                         {approval.opportunity?.role ?? approval.action_label}
+                      </p>
+                    </div>
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            )}
+            {/* Decision memory */}
+            {opportunities.length > 0 && (
+              <Command.Group
+                heading={
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-2 py-1 mt-2 block">
+                    Decision memory
+                  </span>
+                }
+              >
+                {opportunities.slice(0, 8).map((opp) => (
+                  <Command.Item
+                    key={opp.opportunity_id}
+                    value={`${opp.company} ${opp.role} ${opp.location} ${opp.status}`}
+                    onSelect={() => navigate(`/opportunities/${opp.opportunity_id}`)}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-700 cursor-pointer data-[selected=true]:bg-brand-50 data-[selected=true]:text-brand-700"
+                  >
+                    <History className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{opp.role}</p>
+                      <p className="text-xs text-slate-400 truncate">
+                        {opp.company} · {Math.round(opp.match_score * 100)}% match · {opp.status}
                       </p>
                     </div>
                   </Command.Item>
