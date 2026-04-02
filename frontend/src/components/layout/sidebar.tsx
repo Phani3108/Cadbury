@@ -8,6 +8,8 @@ import {
   Bot,
   Target,
   Briefcase,
+  Calendar,
+  FileText,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -19,10 +21,10 @@ import { useApprovalStore } from "@/stores/approval-store";
 
 const DELEGATE_NAV = [
   { id: "recruiter", label: "Recruiter", status: "active" as const },
+  { id: "calendar", label: "Calendar", status: "active" as const },
 ];
 
 const COMING_SOON = [
-  { id: "calendar", label: "Calendar" },
   { id: "finance", label: "Finance" },
   { id: "comms", label: "Comms" },
 ];
@@ -37,6 +39,8 @@ export function Sidebar() {
     { href: "/approvals", label: "Approvals", icon: Inbox, badge: pendingCount },
     { href: "/goals", label: "Goals", icon: Target },
     { href: "/opportunities", label: "Opportunities", icon: Briefcase },
+    { href: "/calendar", label: "Calendar", icon: Calendar },
+    { href: "/digest", label: "Digest", icon: FileText },
   ];
 
   return (

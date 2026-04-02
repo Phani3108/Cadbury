@@ -1,0 +1,34 @@
+version: 1
+delegate_id: calendar
+
+risk_boundary:
+  max_financial_commitment: 0.0
+  max_calendar_commitment_hours: 2.0
+  max_autonomy_score: 0.4
+
+thresholds:
+  min_score_for_engagement: 0.65
+  auto_decline_below: 0.30
+
+allowed_actions:
+  - action: find_slots
+    action_label: Find available time slots
+    auto_approve: true
+    zone: auto
+  - action: propose_times
+    action_label: Propose meeting times
+    auto_approve: false
+    zone: review
+  - action: book_slot
+    action_label: Book calendar slot
+    auto_approve: false
+    zone: review
+  - action: cancel_booking
+    action_label: Cancel calendar booking
+    auto_approve: false
+    zone: review
+
+approval_required_for:
+  - propose_times
+  - book_slot
+  - cancel_booking

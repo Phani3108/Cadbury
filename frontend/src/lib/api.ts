@@ -8,6 +8,12 @@ import type {
   PolicyImpact,
   DelegateEvent,
   PatternInsight,
+  CalendarEvent,
+  TimeSlot,
+  Notification,
+  DigestReport,
+  RecruiterContact,
+  SimulationResult,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -34,6 +40,7 @@ export const delegates = {
   get: (id: string) => request<Delegate>(`/v1/delegates/${id}`),
   pause: (id: string) => request<void>(`/v1/delegates/${id}/pause`, { method: "POST" }),
   resume: (id: string) => request<void>(`/v1/delegates/${id}/resume`, { method: "POST" }),
+  runRecruiter: () => request<{ trace_id: string }>("/v1/delegates/recruiter/run", { method: "POST" }),
 };
 
 // ─── Approvals ────────────────────────────────────────────────────────────────
@@ -109,6 +116,16 @@ export const policy = {
       method: "PUT",
       body: JSON.stringify(data),
     }),
+  simulate: (delegateId: string, thresholds: {
+    min_score_for_engagement: number;
+    auto_decline_below: number;
+    auto_decline_threshold: number;
+    period_days?: number;
+  }) =>
+    request<SimulationResult>(`/v1/delegates/${delegateId}/policy/simulate`, {
+      method: "POST",
+      body: JSON.stringify(thresholds),
+    }),
 };
 
 // ─── Learning ─────────────────────────────────────────────────────────────────
@@ -116,8 +133,81 @@ export const policy = {
 export const learning = {
   patterns: (delegateId: string) =>
     request<PatternInsight[]>(`/v1/delegates/${delegateId}/learning/patterns`),
+  applySuggestion: (delegateId: string, suggestion: {
+    type: string;
+    field: string;
+    action: string;
+    value: string;
+  }) =>
+    request<{ status: string }>(`/v1/delegates/${delegateId}/learning/apply-suggestion`, {
+      method: "POST",
+      body: JSON.stringify(suggestion),
+    }),
+};
+
+// ─── Calendar ─────────────────────────────────────────────────────────────────
+
+export const calendar = {
+  slots: (fromDate?: string, toDate?: string, durationMins = 60) => {
+    const qs = new URLSearchParams();
+    if (fromDate) qs.set("from_date", fromDate);
+    if (toDate) qs.set("to_date", toDate);
+    qs.set("duration_mins", String(durationMins));
+    return request<TimeSlot[]>(`/v1/calendar/slots?${qs}`);
+  },
+  book: (data: { opportunity_id?: string; slot_start: string; slot_end: string; title: string; attendees?: string[] }) =>
+    request<CalendarEvent>("/v1/calendar/book", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  events: () => request<CalendarEvent[]>("/v1/calendar/events"),
+  cancel: (eventId: string) =>
+    request<void>(`/v1/calendar/events/${eventId}/cancel`, { method: "POST" }),
+};
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export const notifications = {
+  list: (unreadOnly = false, limit = 20) => {
+    const qs = new URLSearchParams();
+    if (unreadOnly) qs.set("unread_only", "true");
+    qs.set("limit", String(limit));
+    return request<Notification[]>(`/v1/notifications?${qs}`);
+  },
+  markRead: (id: string) =>
+    request<void>(`/v1/notifications/${id}/read`, { method: "POST" }),
+  markAllRead: () =>
+    request<void>("/v1/notifications/read-all", { method: "POST" }),
+};
+
+// ─── Contacts ─────────────────────────────────────────────────────────────────
+
+export const contacts = {
+  list: () => request<RecruiterContact[]>("/v1/contacts"),
+  get: (id: string) => request<RecruiterContact>(`/v1/contacts/${id}`),
+};
+
+// ─── Digest ───────────────────────────────────────────────────────────────────
+
+export const digest = {
+  get: (period: "daily" | "weekly" = "daily") =>
+    request<DigestReport>(`/v1/digest?period=${period}`),
+  send: (period: "daily" | "weekly" = "daily") =>
+    request<{ status: string }>(`/v1/digest/send?period=${period}`, { method: "POST" }),
 };
 
 // ─── Bundled export ───────────────────────────────────────────────────────────
 
-export const api = { delegates, approvals, opportunities, goals, events, policy, learning };
+export const api = {
+  delegates,
+  approvals,
+  opportunities,
+  goals,
+  events,
+  policy,
+  learning,
+  calendar,
+  notifications,
+  contacts,
+  digest,
+};

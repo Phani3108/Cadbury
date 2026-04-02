@@ -2,9 +2,10 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from runtime.kernel import get_runtime
 from memory.graph import MemoryGraph, list_approvals, list_decisions
-from memory.models import ApprovalStatus
+from memory.models import ApprovalStatus, SimulationRequest
 from runtime.event_bus import get_event_bus
 from policy.loader import load_policy
+from policy.engine import PolicyEngine
 from policy.models import DelegationPolicy
 
 router = APIRouter(prefix="/v1/delegates", tags=["delegates"])
@@ -252,6 +253,76 @@ async def get_learning_patterns(delegate_id: str):
         ))
 
     return patterns
+
+
+# ─── Policy Simulator endpoint ─────────────────────────────────────────────────
+
+@router.post("/{delegate_id}/policy/simulate")
+async def simulate_policy(delegate_id: str, req: "SimulationRequest"):
+    """Replay historical opportunities through hypothetical policy thresholds."""
+    from memory.graph import list_opportunities, list_decisions
+    from memory.models import SimulationRequest
+    from policy.models import PolicyThresholds
+    from policy.simulator import PolicySimulator
+
+    try:
+        engine = PolicyEngine(delegate_id)
+    except FileNotFoundError:
+        raise HTTPException(404, f"No policy found for delegate '{delegate_id}'")
+
+    opps = await list_opportunities(500)
+    decisions = await list_decisions(delegate_id, 500)
+
+    simulator = PolicySimulator()
+    result = simulator.simulate(
+        opportunities=opps,
+        hypothetical=PolicyThresholds(
+            min_score_for_engagement=req.min_score_for_engagement,
+            auto_decline_below=req.auto_decline_below,
+            auto_decline_threshold=req.auto_decline_threshold,
+        ),
+        actual_thresholds=engine.policy.thresholds,
+        decisions=decisions,
+    )
+    return result
+
+
+# ─── Apply Learning Suggestion endpoint ────────────────────────────────────────
+
+class ApplySuggestionRequest(BaseModel):
+    type: str  # "goal_update" or "policy_update"
+    field: str
+    action: str = "update"  # "add", "remove", "update"
+    value: str = ""
+
+
+@router.post("/{delegate_id}/learning/apply-suggestion")
+async def apply_suggestion(delegate_id: str, req: ApplySuggestionRequest):
+    """Apply a learning suggestion to goals or policy."""
+    if req.type == "goal_update":
+        from memory.graph import get_career_goals, upsert_career_goals
+        goals = await get_career_goals()
+        field_val = getattr(goals, req.field, None)
+        if isinstance(field_val, list):
+            if req.action == "add" and req.value not in field_val:
+                field_val.append(req.value)
+            elif req.action == "remove" and req.value in field_val:
+                field_val.remove(req.value)
+            setattr(goals, req.field, field_val)
+        elif req.action == "update":
+            try:
+                setattr(goals, req.field, type(field_val)(req.value) if field_val is not None else req.value)
+            except (ValueError, TypeError):
+                raise HTTPException(400, f"Cannot set {req.field} to {req.value}")
+        await upsert_career_goals(goals)
+        return {"status": "applied", "type": "goal_update", "field": req.field}
+
+    elif req.type == "policy_update":
+        from memory.graph import set_policy_override
+        await set_policy_override(delegate_id, req.field, req.value)
+        return {"status": "applied", "type": "policy_update", "field": req.field}
+
+    raise HTTPException(400, f"Unknown suggestion type: {req.type}")
 
 
 # ─── Manual pipeline trigger ───────────────────────────────────────────────────

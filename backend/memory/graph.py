@@ -17,11 +17,13 @@ import aiosqlite
 from memory.models import (
     ApprovalItem,
     ApprovalStatus,
+    CalendarEvent,
     CareerGoals,
     DecisionLog,
     DelegateEvent,
     JobOpportunity,
     MatchBreakdown,
+    Notification,
     RecruiterContact,
 )
 
@@ -103,7 +105,42 @@ async def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_approvals_status ON approval_items(status);
             CREATE INDEX IF NOT EXISTS idx_events_delegate ON delegate_events(delegate_id, timestamp);
             CREATE INDEX IF NOT EXISTS idx_opportunities_status ON job_opportunities(status);
+
+            CREATE TABLE IF NOT EXISTS calendar_events (
+                event_id       TEXT PRIMARY KEY,
+                opportunity_id TEXT,
+                title          TEXT NOT NULL,
+                start_at       TEXT NOT NULL,
+                end_at         TEXT NOT NULL,
+                status         TEXT NOT NULL DEFAULT 'proposed',
+                data           TEXT NOT NULL,
+                created_at     TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_calendar_status ON calendar_events(status);
+
+            CREATE TABLE IF NOT EXISTS notifications (
+                notification_id TEXT PRIMARY KEY,
+                type            TEXT NOT NULL,
+                title           TEXT NOT NULL,
+                read            INTEGER NOT NULL DEFAULT 0,
+                data            TEXT NOT NULL,
+                created_at      TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
+
+            CREATE TABLE IF NOT EXISTS policy_overrides (
+                delegate_id TEXT NOT NULL,
+                key         TEXT NOT NULL,
+                value       TEXT NOT NULL,
+                updated_at  TEXT NOT NULL,
+                PRIMARY KEY (delegate_id, key)
+            );
         """)
+        # Add thread_id column if missing (migration-safe)
+        try:
+            await conn.execute("ALTER TABLE job_opportunities ADD COLUMN thread_id TEXT")
+        except Exception:
+            pass  # Column already exists
         await conn.commit()
 
 
@@ -350,6 +387,202 @@ async def list_decisions(delegate_id: Optional[str] = None, limit: int = 100) ->
         return [DecisionLog.model_validate_json(r["data"]) for r in rows]
 
 
+# ─── Contacts ────────────────────────────────────────────────────────────────
+
+async def list_contacts() -> list[RecruiterContact]:
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            "SELECT data FROM recruiter_contacts ORDER BY created_at DESC"
+        )
+        return [RecruiterContact.model_validate_json(r["data"]) for r in rows]
+
+
+async def get_contact(contact_id: str) -> Optional[RecruiterContact]:
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            "SELECT data FROM recruiter_contacts WHERE contact_id = ?", (contact_id,)
+        )
+        if rows:
+            return RecruiterContact.model_validate_json(rows[0]["data"])
+        return None
+
+
+async def update_contact(contact: RecruiterContact) -> RecruiterContact:
+    async with db() as conn:
+        await conn.execute(
+            "UPDATE recruiter_contacts SET data = ? WHERE contact_id = ?",
+            (contact.model_dump_json(), contact.contact_id),
+        )
+        await conn.commit()
+    return contact
+
+
+# ─── Thread Tracking ─────────────────────────────────────────────────────────
+
+async def get_opportunity_by_thread(thread_id: str) -> Optional[JobOpportunity]:
+    if not thread_id:
+        return None
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            "SELECT data FROM job_opportunities WHERE json_extract(data, '$.thread_id') = ? LIMIT 1",
+            (thread_id,),
+        )
+        if rows:
+            return JobOpportunity.model_validate_json(rows[0]["data"])
+        return None
+
+
+# ─── Calendar Events ─────────────────────────────────────────────────────────
+
+async def save_calendar_event(event: CalendarEvent) -> CalendarEvent:
+    async with db() as conn:
+        await conn.execute(
+            """
+            INSERT INTO calendar_events(event_id, opportunity_id, title, start_at, end_at, status, data, created_at)
+            VALUES (?,?,?,?,?,?,?,?)
+            ON CONFLICT(event_id) DO UPDATE SET status=excluded.status, data=excluded.data
+            """,
+            (
+                event.event_id,
+                event.opportunity_id,
+                event.title,
+                event.start_at.isoformat(),
+                event.end_at.isoformat(),
+                event.status,
+                event.model_dump_json(),
+                event.created_at.isoformat(),
+            ),
+        )
+        await conn.commit()
+    return event
+
+
+async def list_calendar_events(status: Optional[str] = None, limit: int = 50) -> list[CalendarEvent]:
+    async with db() as conn:
+        if status:
+            rows = await conn.execute_fetchall(
+                "SELECT data FROM calendar_events WHERE status = ? ORDER BY start_at DESC LIMIT ?",
+                (status, limit),
+            )
+        else:
+            rows = await conn.execute_fetchall(
+                "SELECT data FROM calendar_events ORDER BY start_at DESC LIMIT ?", (limit,)
+            )
+        return [CalendarEvent.model_validate_json(r["data"]) for r in rows]
+
+
+async def get_calendar_event(event_id: str) -> Optional[CalendarEvent]:
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            "SELECT data FROM calendar_events WHERE event_id = ?", (event_id,)
+        )
+        if rows:
+            return CalendarEvent.model_validate_json(rows[0]["data"])
+        return None
+
+
+async def get_calendar_events_for_opportunity(opportunity_id: str) -> list[CalendarEvent]:
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            "SELECT data FROM calendar_events WHERE opportunity_id = ?", (opportunity_id,)
+        )
+        return [CalendarEvent.model_validate_json(r["data"]) for r in rows]
+
+
+# ─── Notifications ───────────────────────────────────────────────────────────
+
+async def save_notification(notif: Notification) -> Notification:
+    async with db() as conn:
+        await conn.execute(
+            """
+            INSERT OR IGNORE INTO notifications(notification_id, type, title, read, data, created_at)
+            VALUES (?,?,?,?,?,?)
+            """,
+            (
+                notif.notification_id,
+                notif.type,
+                notif.title,
+                int(notif.read),
+                notif.model_dump_json(),
+                notif.created_at.isoformat(),
+            ),
+        )
+        await conn.commit()
+    return notif
+
+
+async def list_notifications(unread_only: bool = False, limit: int = 20) -> list[Notification]:
+    async with db() as conn:
+        if unread_only:
+            rows = await conn.execute_fetchall(
+                "SELECT data FROM notifications WHERE read = 0 ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            )
+        else:
+            rows = await conn.execute_fetchall(
+                "SELECT data FROM notifications ORDER BY created_at DESC LIMIT ?", (limit,)
+            )
+        return [Notification.model_validate_json(r["data"]) for r in rows]
+
+
+async def mark_notification_read(notification_id: str) -> bool:
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            "SELECT data FROM notifications WHERE notification_id = ?", (notification_id,)
+        )
+        if not rows:
+            return False
+        notif = Notification.model_validate_json(rows[0]["data"])
+        notif.read = True
+        await conn.execute(
+            "UPDATE notifications SET read = 1, data = ? WHERE notification_id = ?",
+            (notif.model_dump_json(), notification_id),
+        )
+        await conn.commit()
+        return True
+
+
+async def mark_all_notifications_read() -> int:
+    async with db() as conn:
+        # Get all unread
+        rows = await conn.execute_fetchall(
+            "SELECT notification_id, data FROM notifications WHERE read = 0"
+        )
+        for r in rows:
+            notif = Notification.model_validate_json(r["data"])
+            notif.read = True
+            await conn.execute(
+                "UPDATE notifications SET read = 1, data = ? WHERE notification_id = ?",
+                (notif.model_dump_json(), notif.notification_id),
+            )
+        await conn.commit()
+        return len(rows)
+
+
+# ─── Policy Overrides ────────────────────────────────────────────────────────
+
+async def get_policy_overrides(delegate_id: str) -> dict[str, str]:
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            "SELECT key, value FROM policy_overrides WHERE delegate_id = ?",
+            (delegate_id,),
+        )
+        return {r["key"]: r["value"] for r in rows}
+
+
+async def set_policy_override(delegate_id: str, key: str, value: str) -> None:
+    async with db() as conn:
+        await conn.execute(
+            """
+            INSERT INTO policy_overrides(delegate_id, key, value, updated_at)
+            VALUES (?,?,?,?)
+            ON CONFLICT(delegate_id, key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+            """,
+            (delegate_id, key, value, datetime.now(timezone.utc).isoformat()),
+        )
+        await conn.commit()
+
+
 # ─── MemoryGraph class (injectable wrapper for testing / DI) ──────────────────
 
 class MemoryGraph:
@@ -404,3 +637,27 @@ class MemoryGraph:
         self, delegate_id: Optional[str] = None, limit: int = 100
     ) -> list[DecisionLog]:
         return await list_decisions(delegate_id, limit)
+
+    async def get_opportunity_by_thread(self, thread_id: str) -> Optional[JobOpportunity]:
+        return await get_opportunity_by_thread(thread_id)
+
+    async def list_contacts(self) -> list[RecruiterContact]:
+        return await list_contacts()
+
+    async def get_contact(self, contact_id: str) -> Optional[RecruiterContact]:
+        return await get_contact(contact_id)
+
+    async def update_contact(self, contact: RecruiterContact) -> RecruiterContact:
+        return await update_contact(contact)
+
+    async def save_calendar_event(self, event: CalendarEvent) -> CalendarEvent:
+        return await save_calendar_event(event)
+
+    async def list_calendar_events(self, status: Optional[str] = None, limit: int = 50) -> list[CalendarEvent]:
+        return await list_calendar_events(status, limit)
+
+    async def get_calendar_event(self, event_id: str) -> Optional[CalendarEvent]:
+        return await get_calendar_event(event_id)
+
+    async def save_notification(self, notif: Notification) -> Notification:
+        return await save_notification(notif)

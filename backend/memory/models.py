@@ -32,8 +32,14 @@ class EventType(StrEnum):
     HUMAN_APPROVED = "human_approved"
     HUMAN_REJECTED = "human_rejected"
     RESPONSE_SENT = "response_sent"
+    AUTO_DECLINED = "auto_declined"
     CALENDAR_BOOKED = "calendar_booked"
+    CALENDAR_CANCELLED = "calendar_cancelled"
+    CALENDAR_PREBLOCK_REQUESTED = "calendar_preblock_requested"
+    CALENDAR_SLOTS_FOUND = "calendar_slots_found"
+    CALENDAR_PROPOSED = "calendar_proposed"
     POLICY_BLOCKED = "policy_blocked"
+    NOTIFICATION_CREATED = "notification_created"
     ERROR = "error"
 
 
@@ -154,6 +160,8 @@ class JobOpportunity(BaseModel):
     status: OpportunityStatus = OpportunityStatus.RECEIVED
     email_subject: Optional[str] = None
     email_id: Optional[str] = None
+    thread_id: Optional[str] = None
+    company_enrichment: dict = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 
@@ -211,3 +219,54 @@ class DecisionLog(BaseModel):
     human_approved: Optional[bool] = None
     outcome: Optional[str] = None
     timestamp: datetime = Field(default_factory=_now)
+
+
+# ─── Calendar Event ──────────────────────────────────────────────────────────
+
+class CalendarEventStatus(StrEnum):
+    PROPOSED = "proposed"
+    CONFIRMED = "confirmed"
+    TENTATIVE = "tentative"
+    CANCELLED = "cancelled"
+
+
+class CalendarEvent(BaseModel):
+    event_id: str = Field(default_factory=_uid)
+    opportunity_id: Optional[str] = None
+    title: str
+    start_at: datetime
+    end_at: datetime
+    attendees: list[str] = Field(default_factory=list)
+    status: CalendarEventStatus = CalendarEventStatus.PROPOSED
+    provider_event_id: Optional[str] = None
+    delegate_id: str = "calendar"
+    created_at: datetime = Field(default_factory=_now)
+
+
+# ─── Notification ────────────────────────────────────────────────────────────
+
+class NotificationType(StrEnum):
+    NEW_APPROVAL = "new_approval"
+    HIGH_MATCH = "high_match"
+    AUTO_ACTED = "auto_acted"
+    DIGEST_READY = "digest_ready"
+    THRESHOLD_CROSSED = "threshold_crossed"
+
+
+class Notification(BaseModel):
+    notification_id: str = Field(default_factory=_uid)
+    type: NotificationType
+    title: str
+    body: str
+    link: str = ""
+    read: bool = False
+    created_at: datetime = Field(default_factory=_now)
+
+
+# ─── Simulation Result ───────────────────────────────────────────────────────
+
+class SimulationRequest(BaseModel):
+    min_score_for_engagement: float = 0.65
+    auto_decline_below: float = 0.30
+    auto_decline_threshold: float = 0.25
+    period_days: int = 90

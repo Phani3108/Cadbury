@@ -29,8 +29,14 @@ export type EventType =
   | "human_approved"
   | "human_rejected"
   | "response_sent"
+  | "auto_declined"
   | "calendar_booked"
+  | "calendar_cancelled"
+  | "calendar_preblock_requested"
+  | "calendar_slots_found"
+  | "calendar_proposed"
   | "policy_blocked"
+  | "notification_created"
   | "error";
 
 export interface DelegateEvent {
@@ -113,6 +119,7 @@ export interface JobOpportunity {
   remote_policy: "remote" | "hybrid" | "onsite" | "unknown";
   equity: string | null;
   jd_summary: string | null;
+  jd_text: string | null;
   match_score: number; // 0-1
   match_breakdown: MatchBreakdown;
   status: OpportunityStatus;
@@ -120,6 +127,8 @@ export interface JobOpportunity {
   updated_at: string;
   email_subject: string | null;
   email_id: string | null;
+  thread_id: string | null;
+  company_enrichment: Record<string, unknown>;
 }
 
 // ─── Career Goals ─────────────────────────────────────────────────────────────
@@ -182,6 +191,59 @@ export interface PolicyImpact {
   estimated_time_saved_hours: number;
 }
 
+// ─── Calendar ────────────────────────────────────────────────────────────────
+
+export type CalendarEventStatus = "proposed" | "confirmed" | "tentative" | "cancelled";
+
+export interface CalendarEvent {
+  event_id: string;
+  opportunity_id: string | null;
+  title: string;
+  start_at: string;
+  end_at: string;
+  attendees: string[];
+  status: CalendarEventStatus;
+  provider_event_id: string | null;
+  delegate_id: string;
+  created_at: string;
+}
+
+export interface TimeSlot {
+  start: string;
+  end: string;
+  label: string;
+}
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+
+export type NotificationType =
+  | "new_approval"
+  | "high_match"
+  | "auto_acted"
+  | "digest_ready"
+  | "threshold_crossed";
+
+export interface Notification {
+  notification_id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  link: string;
+  read: boolean;
+  created_at: string;
+}
+
+// ─── Digest ──────────────────────────────────────────────────────────────────
+
+export interface DigestReport {
+  period: string;
+  generated_at: string;
+  highlights: string[];
+  action_items: string[];
+  stats: Record<string, number>;
+  summary: string;
+}
+
 // ─── Learning Patterns ────────────────────────────────────────────────────────
 
 export interface PatternInsight {
@@ -189,6 +251,36 @@ export interface PatternInsight {
   description: string;
   confidence: number; // 0-1
   evidence: number;   // sample count
+  pattern_type?: string;
+  suggested_action?: {
+    type: string;
+    field: string;
+    action: string;
+    value: string;
+    reason: string;
+  } | null;
+}
+
+// ─── Policy Simulation ───────────────────────────────────────────────────────
+
+export interface SimulationResult {
+  period_days: number;
+  total_opportunities: number;
+  would_auto_decline: number;
+  would_engage: number;
+  would_hold: number;
+  would_review: number;
+  changed_outcomes: {
+    opportunity_id: string;
+    company: string;
+    role: string;
+    match_score: number;
+    actual_action: string;
+    simulated_action: string;
+    reason: string;
+  }[];
+  time_saved_hours: number;
+  approval_reduction_pct: number;
 }
 
 // ─── Real-time / SSE ──────────────────────────────────────────────────────────

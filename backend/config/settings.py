@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     # Polling
     email_poll_interval_seconds: int = 900
 
+    # Company enrichment
+    apollo_api_key: str = ""
+
+    # Calendar
+    calendar_preblock_threshold: float = 0.80
+
     # CORS
     frontend_url: str = "http://localhost:3000"
 

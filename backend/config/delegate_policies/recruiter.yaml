@@ -9,6 +9,7 @@ risk_boundary:
 thresholds:
   min_score_for_engagement: 0.65       # >= 0.65 → draft engage reply
   auto_decline_below: 0.30             # < 0.30  → draft polite decline
+  auto_decline_threshold: 0.25         # < 0.25  → auto-decline without human review
   # between 0.30 and 0.65             → draft hold/request-info reply
 
 allowed_actions:

@@ -52,12 +52,20 @@ from api.routes.approvals import router as approvals_router
 from api.routes.delegates import router as delegates_router
 from api.routes.events import router as events_router
 from api.routes.memory import router as memory_router
+from api.routes.digest import router as digest_router
+from api.routes.notifications import router as notifications_router
+from api.routes.contacts import router as contacts_router
+from api.routes.calendar import router as calendar_router
 
 app.include_router(goals_router)
 app.include_router(approvals_router)
 app.include_router(delegates_router)
 app.include_router(events_router)
 app.include_router(memory_router)
+app.include_router(digest_router)
+app.include_router(notifications_router)
+app.include_router(contacts_router)
+app.include_router(calendar_router)
 
 
 @app.get("/health")

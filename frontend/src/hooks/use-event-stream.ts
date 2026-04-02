@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useEventStore } from "@/stores/event-store";
 import { useApprovalStore } from "@/stores/approval-store";
-import type { DelegateEvent, ApprovalItem } from "@/lib/types";
+import type { DelegateEvent, ApprovalItem, Notification } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const MAX_BACKOFF_MS = 30_000;
@@ -47,6 +47,16 @@ export function useEventStream(delegateId?: string) {
       try {
         const { approval_id, status } = JSON.parse(e.data);
         updateApproval(approval_id, { status });
+      } catch {}
+    });
+
+    es.addEventListener("notification.new", (e: MessageEvent) => {
+      try {
+        // Dynamic import to avoid circular deps; store may not exist yet on first render
+        import("@/stores/notification-store").then(({ useNotificationStore }) => {
+          const notif: Notification = JSON.parse(e.data);
+          useNotificationStore.getState().addNotification(notif);
+        });
       } catch {}
     });
 

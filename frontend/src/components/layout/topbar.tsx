@@ -2,17 +2,20 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Search, Bell, ChevronRight } from "lucide-react";
+import { Search, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui-store";
 import { useApprovalStore } from "@/stores/approval-store";
 import { useEventStore } from "@/stores/event-store";
+import { NotificationBell } from "@/components/shared/notification-bell";
 
 const ROUTE_LABELS: Record<string, string> = {
   "/": "Dashboard",
   "/approvals": "Approvals",
   "/goals": "Goals",
   "/opportunities": "Opportunities",
+  "/calendar": "Calendar",
+  "/digest": "Digest",
   "/settings": "Settings",
 };
 
@@ -83,15 +86,7 @@ export function Topbar() {
         </button>
 
         {/* Notifications */}
-        <Link
-          href="/approvals"
-          className="relative w-8 h-8 flex items-center justify-center rounded-md text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition-colors"
-        >
-          <Bell className="w-4 h-4" />
-          {pendingCount > 0 && (
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-          )}
-        </Link>
+        <NotificationBell />
 
         {/* User avatar */}
         <button className="w-7 h-7 rounded-full bg-brand-100 flex items-center justify-center text-brand-600 text-xs font-semibold hover:ring-2 hover:ring-brand-300 transition-all">

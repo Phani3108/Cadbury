@@ -14,9 +14,12 @@ from typing import TYPE_CHECKING
 from memory.graph import MemoryGraph
 from memory.models import (
     CareerGoals,
+    DecisionLog,
     DelegateEvent,
     EventType,
     JobOpportunity,
+    Notification,
+    NotificationType,
     OpportunityStatus,
     RecruiterContact,
     RemotePolicy,
@@ -119,10 +122,24 @@ class RecruiterPipeline:
 
         for email in ctx.emails_ingested:
             try:
+                # Thread tracking: check if this thread already has an opportunity
+                if email.thread_id:
+                    existing = await self.graph.get_opportunity_by_thread(email.thread_id)
+                    if existing:
+                        # Update existing opportunity with fresh email context
+                        existing.jd_text = email.body
+                        existing.updated_at = datetime.now(timezone.utc)
+                        await self.graph.save_opportunity(existing)
+                        ctx.opportunities.append(existing)
+                        continue
+
                 opportunity = await self._extract_opportunity(email)
                 if opportunity is None:
                     continue
 
+                # Store thread_id and full email body for downstream use
+                opportunity.thread_id = email.thread_id
+                opportunity.jd_text = email.body
                 await self.graph.save_opportunity(opportunity)
 
                 event = DelegateEvent(
@@ -317,7 +334,7 @@ class RecruiterPipeline:
                     response_type=response_type,
                     opportunity=opportunity,
                     goals=goals,
-                    email_body="",  # full body not stored yet; included in Phase 2 MS Graph integration
+                    email_body=opportunity.jd_text or "",
                     llm_enabled=self.llm_enabled,
                 )
             except Exception as exc:
@@ -351,8 +368,8 @@ class RecruiterPipeline:
 
     async def _stage_6_act(self, ctx: PipelineContext) -> None:
         """
-        Create ApprovalItem for every drafted opportunity.
-        All actions require human approval in MVP.
+        Create ApprovalItem for each drafted opportunity, OR auto-decline if the
+        score is below the auto_decline_threshold.
         """
         if not ctx.opportunities:
             return
@@ -363,6 +380,9 @@ class RecruiterPipeline:
 
         if not response_types:
             return
+
+        from policy.engine import PolicyEngine
+        engine = PolicyEngine("recruiter")
 
         for opportunity in ctx.opportunities:
             response_type = response_types.get(opportunity.opportunity_id)
@@ -378,12 +398,57 @@ class RecruiterPipeline:
                 "decline": "Send polite decline",
             }
 
+            # Check if this can be auto-declined
+            action_name = "send_polite_decline" if response_type == "decline" else f"send_{response_type}_reply"
+            if engine.can_auto_act(action_name, opportunity.match_score):
+                # Auto-decline: send immediately without approval
+                await self.email_provider.send_reply(opportunity.email_id or "", draft_text)
+                opportunity.status = OpportunityStatus.RESPONDED
+                await self.graph.save_opportunity(opportunity)
+
+                event = DelegateEvent(
+                    delegate_id="recruiter",
+                    event_type=EventType.AUTO_DECLINED,
+                    trace_id=ctx.trace_id,
+                    summary=f"Auto-declined: {opportunity.company} — {opportunity.role} ({opportunity.match_score:.0%})",
+                    payload={
+                        "opportunity_id": opportunity.opportunity_id,
+                        "response_type": response_type,
+                        "match_score": opportunity.match_score,
+                    },
+                    policy_rules_checked=rules_checked,
+                )
+                await self.graph.save_event(event)
+                if self.event_bus:
+                    await self.event_bus.publish_event(event)
+                ctx.emit(event)
+
+                # Log decision as auto-acted
+                await self.graph.log_decision(DecisionLog(
+                    delegate_id="recruiter",
+                    event_id=event.event_id,
+                    action_taken=f"auto_declined:{opportunity.opportunity_id}",
+                    reasoning=f"Score {opportunity.match_score:.0%} below auto-decline threshold",
+                    human_approved=None,
+                    policy_check={"rules_checked": rules_checked, "response_type": response_type},
+                ))
+
+                # Create notification for auto-decline
+                await self.graph.save_notification(Notification(
+                    type=NotificationType.AUTO_ACTED,
+                    title=f"Auto-declined: {opportunity.company}",
+                    body=f"{opportunity.role} — {opportunity.match_score:.0%} match",
+                    link=f"/opportunities/{opportunity.opportunity_id}",
+                ))
+                continue
+
+            # Otherwise, create ApprovalItem for human review
             from memory.models import ApprovalItem as _AI
             approval = _AI(
                 delegate_id="recruiter",
                 event_id=ctx.events_emitted[-1].event_id if ctx.events_emitted else "",
                 opportunity_id=opportunity.opportunity_id,
-                action=f"send_{response_type}_reply",
+                action=action_name,
                 action_label=action_labels.get(response_type, "Send reply"),
                 context_summary=(
                     f"{opportunity.company} · {opportunity.role} · "
@@ -424,11 +489,37 @@ class RecruiterPipeline:
             await self.graph.save_event(event)
             if self.event_bus:
                 await self.event_bus.publish_event(event)
-                # Also emit typed SSE event so the frontend approval inbox updates in real-time
                 await self.event_bus.publish_typed_event(
                     "approval.new", approval.model_dump(mode="json")
                 )
             ctx.emit(event)
+
+            # Create notification for new approval
+            await self.graph.save_notification(Notification(
+                type=NotificationType.NEW_APPROVAL,
+                title=f"Review needed: {opportunity.company}",
+                body=f"{opportunity.role} — {opportunity.match_score:.0%} match",
+                link=f"/approvals",
+            ))
+
+            # Calendar pre-block for high-match engagements
+            if response_type == "engage" and opportunity.match_score >= 0.80:
+                cal_event = DelegateEvent(
+                    delegate_id="recruiter",
+                    event_type=EventType.CALENDAR_PREBLOCK_REQUESTED,
+                    trace_id=ctx.trace_id,
+                    summary=f"Calendar pre-block requested for {opportunity.company}",
+                    payload={
+                        "opportunity_id": opportunity.opportunity_id,
+                        "company": opportunity.company,
+                        "role": opportunity.role,
+                        "contact_id": opportunity.contact_id,
+                    },
+                )
+                await self.graph.save_event(cal_event)
+                if self.event_bus:
+                    await self.event_bus.publish_event(cal_event)
+                ctx.emit(cal_event)
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────

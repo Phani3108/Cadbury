@@ -34,6 +34,10 @@ class PolicyEngine:
         if permission.auto_approve:
             return "auto"
 
+        # Auto-decline for very low scores
+        if action == "send_polite_decline" and score < self.policy.thresholds.auto_decline_threshold:
+            return "auto"
+
         if self.policy.requires_approval(action):
             return "review"
 
