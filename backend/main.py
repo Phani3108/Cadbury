@@ -56,6 +56,7 @@ from api.routes.digest import router as digest_router
 from api.routes.notifications import router as notifications_router
 from api.routes.contacts import router as contacts_router
 from api.routes.calendar import router as calendar_router
+from api.routes.settings import router as settings_router
 
 app.include_router(goals_router)
 app.include_router(approvals_router)
@@ -66,6 +67,7 @@ app.include_router(digest_router)
 app.include_router(notifications_router)
 app.include_router(contacts_router)
 app.include_router(calendar_router)
+app.include_router(settings_router)
 
 
 @app.get("/health")

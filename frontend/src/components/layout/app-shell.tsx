@@ -5,6 +5,7 @@ import { useUIStore } from "@/stores/ui-store";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { CommandPalette } from "@/components/shared/command-palette";
+import { Footer } from "./footer";
 import { cn } from "@/lib/utils";
 
 interface AppShellProps {
@@ -28,6 +29,9 @@ export function AppShell({ children }: AppShellProps) {
         <main className="px-6 py-6 max-w-7xl">
           {children}
         </main>
+        <div className="px-6 max-w-7xl">
+          <Footer />
+        </div>
       </div>
       <CommandPalette />
     </div>
