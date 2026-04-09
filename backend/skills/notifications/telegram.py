@@ -119,3 +119,16 @@ async def send_digest(
         f"Avg match score: <b>{int(avg_score * 100)}%</b>"
     )
     return await send_telegram_message(text)
+
+
+async def notify_email_sent(
+    approval_id: str,
+    opportunity_id: str | None,
+    provider: str,
+) -> bool:
+    """Notify that an approved email reply was actually sent."""
+    text = (
+        f"✅ <b>Email Sent</b>\n\n"
+        f"Approved reply dispatched via {provider}.\n"
+    )
+    return await send_telegram_message(text)

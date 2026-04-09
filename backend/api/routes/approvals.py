@@ -16,6 +16,7 @@ from memory.models import (
     DecisionLog,
 )
 from runtime.event_bus import publish_event, publish_typed_event
+from skills.actions import execute_send_email
 
 router = APIRouter(prefix="/v1/approvals", tags=["approvals"])
 
@@ -71,7 +72,18 @@ async def approve_item(approval_id: str, action: ApprovalAction = ApprovalAction
         policy_check=item.policy_check,
     ))
 
-    return {"status": "approved"}
+    # Execute the real-world action (send the email)
+    send_result = {"sent": False, "reason": "not_email_action"}
+    if item.action in ("send_reply", "send_engage", "send_decline", "send_hold"):
+        send_result = await execute_send_email(
+            approval_id=approval_id,
+            delegate_id=item.delegate_id,
+            opportunity_id=item.opportunity_id,
+            draft_content=item.draft_content,
+            payload=item.policy_check,
+        )
+
+    return {"status": "approved", "email": send_result}
 
 
 @router.post("/{approval_id}/reject")

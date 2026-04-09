@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Polling
     email_poll_interval_seconds: int = 900
 
+    # Google OAuth
+    google_client_id: str = ""
+    google_client_secret: str = ""
+
     # Company enrichment
     apollo_api_key: str = ""
 

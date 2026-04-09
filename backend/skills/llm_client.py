@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 _client: AsyncOpenAI | None = None
 
 
+class BudgetExceededError(Exception):
+    """Raised when a delegate's LLM budget is exhausted."""
+    pass
+
+
 # ─── Usage Tracking ──────────────────────────────────────────────────────────
 
 @dataclass
@@ -48,7 +53,7 @@ def get_usage_stats() -> dict:
     }
 
 
-def _track_usage(response, tier: str) -> None:
+def _track_usage(response, tier: str, delegate_id: str = "") -> None:
     """Record token usage from an API response."""
     usage = getattr(response, "usage", None)
     if usage is None:
@@ -63,6 +68,34 @@ def _track_usage(response, tier: str) -> None:
         "LLM call [%s]: %d prompt + %d completion = %d tokens",
         tier, usage.prompt_tokens, usage.completion_tokens, usage.total_tokens,
     )
+    # Record to per-delegate budget (fire and forget in sync context)
+    if delegate_id:
+        _pending_budget_records.append(
+            (delegate_id, _get_model_name(tier), usage.prompt_tokens, usage.completion_tokens)
+        )
+
+
+_pending_budget_records: list[tuple[str, str, int, int]] = []
+
+
+def _get_model_name(tier: str) -> str:
+    settings = get_settings()
+    return settings.openai_model_heavy if tier == "heavy" else settings.openai_model_cheap
+
+
+async def _flush_budget_records() -> None:
+    """Flush any pending budget records to the budget store."""
+    global _pending_budget_records
+    if not _pending_budget_records:
+        return
+    records = _pending_budget_records[:]
+    _pending_budget_records = []
+    for delegate_id, model, prompt_tokens, completion_tokens in records:
+        try:
+            from policy.budget import record_usage
+            await record_usage(delegate_id, model, prompt_tokens, completion_tokens)
+        except Exception:
+            logger.debug("Failed to record budget for %s", delegate_id, exc_info=True)
 
 
 def _get_client() -> AsyncOpenAI:
@@ -77,8 +110,14 @@ def _get_client() -> AsyncOpenAI:
     return _client
 
 
-async def chat(messages: list[dict], tier: str = "cheap") -> str:
+async def chat(messages: list[dict], tier: str = "cheap", delegate_id: str = "") -> str:
     """Send a chat completion request. tier='cheap' or 'heavy'."""
+    # Budget check
+    if delegate_id:
+        from policy.budget import check_budget
+        if not await check_budget(delegate_id):
+            raise BudgetExceededError(f"Delegate '{delegate_id}' has exceeded its daily budget")
+
     settings = get_settings()
     model = settings.openai_model_heavy if tier == "heavy" else settings.openai_model_cheap
     client = _get_client()
@@ -87,12 +126,19 @@ async def chat(messages: list[dict], tier: str = "cheap") -> str:
         messages=messages,
         temperature=0.2,
     )
-    _track_usage(response, tier)
+    _track_usage(response, tier, delegate_id)
+    await _flush_budget_records()
     return response.choices[0].message.content or ""
 
 
-async def extract_json(system_prompt: str, user_content: str) -> dict[str, Any]:
+async def extract_json(system_prompt: str, user_content: str, delegate_id: str = "") -> dict[str, Any]:
     """Extract structured JSON from text using tool-calling for reliable parsing."""
+    # Budget check
+    if delegate_id:
+        from policy.budget import check_budget
+        if not await check_budget(delegate_id):
+            raise BudgetExceededError(f"Delegate '{delegate_id}' has exceeded its daily budget")
+
     settings = get_settings()
     client = _get_client()
     response = await client.chat.completions.create(
@@ -123,5 +169,6 @@ async def extract_json(system_prompt: str, user_content: str) -> dict[str, Any]:
     )
     tool_call = response.choices[0].message.tool_calls[0]
     args = json.loads(tool_call.function.arguments)
-    _track_usage(response, "cheap")
+    _track_usage(response, "cheap", delegate_id)
+    await _flush_budget_records()
     return args.get("result", {})

@@ -1,4 +1,9 @@
-"""Microsoft Graph API email provider implementation."""
+"""Microsoft Graph API email provider implementation.
+
+Supports two auth modes:
+1. Client-credentials (daemon app) — original mode
+2. Delegated (authorization code + refresh token) — consumer-facing mode
+"""
 from __future__ import annotations
 
 import logging
@@ -16,19 +21,26 @@ GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 
 class MSGraphEmailProvider(EmailProvider):
-    """EmailProvider backed by Microsoft Graph API using client-credentials OAuth2."""
+    """EmailProvider backed by Microsoft Graph API.
+
+    Auth modes:
+    - Client-credentials: pass tenant_id, client_id, client_secret, user_email
+    - Delegated: pass client_id + let it load tokens from the encrypted token store
+    """
 
     def __init__(
         self,
-        tenant_id: str,
-        client_id: str,
-        client_secret: str,
-        user_email: str,
+        tenant_id: str = "",
+        client_id: str = "",
+        client_secret: str = "",
+        user_email: str = "",
+        use_delegated: bool = False,
     ) -> None:
         self._tenant_id = tenant_id
         self._client_id = client_id
         self._client_secret = client_secret
         self._user_email = user_email
+        self._use_delegated = use_delegated
 
         self._access_token: str | None = None
         self._token_expires_at: float = 0.0
@@ -43,6 +55,12 @@ class MSGraphEmailProvider(EmailProvider):
         if self._access_token and time.monotonic() < self._token_expires_at:
             return self._access_token
 
+        if self._use_delegated:
+            return await self._refresh_delegated_token()
+        return await self._client_credentials_token()
+
+    async def _client_credentials_token(self) -> str:
+        """Original daemon-app token acquisition."""
         url = TOKEN_URL.format(tenant_id=self._tenant_id)
         data = {
             "client_id": self._client_id,
@@ -56,10 +74,51 @@ class MSGraphEmailProvider(EmailProvider):
         payload = resp.json()
 
         self._access_token = payload["access_token"]
-        # Expire 60 s early to avoid edge-case clock drift
         expires_in: int = payload.get("expires_in", 3600)
         self._token_expires_at = time.monotonic() + expires_in - 60
-        logger.debug("Acquired new MS Graph token (expires_in=%d)", expires_in)
+        logger.debug("Acquired client-credentials token (expires_in=%d)", expires_in)
+        return self._access_token
+
+    async def _refresh_delegated_token(self) -> str:
+        """Refresh a delegated user token using stored refresh_token."""
+        from skills.auth.token_store import load_tokens, save_tokens
+
+        tokens = await load_tokens("microsoft")
+        if not tokens or not tokens.get("refresh_token"):
+            raise ValueError(
+                "No Microsoft tokens found. Connect via /v1/auth/microsoft/login first."
+            )
+
+        tenant = self._tenant_id or "common"
+        url = TOKEN_URL.format(tenant_id=tenant)
+        data = {
+            "client_id": self._client_id,
+            "grant_type": "refresh_token",
+            "refresh_token": tokens["refresh_token"],
+            "scope": "offline_access Mail.Read Mail.Send Calendars.ReadWrite User.Read",
+        }
+        if self._client_secret:
+            data["client_secret"] = self._client_secret
+
+        resp = await self._client.post(url, data=data)
+        if resp.status_code != 200:
+            logger.error("Token refresh failed: %s", resp.text)
+            raise ValueError("Microsoft token refresh failed. Re-connect via /v1/auth/microsoft/login.")
+
+        payload = resp.json()
+        self._access_token = payload["access_token"]
+        expires_in = payload.get("expires_in", 3600)
+        self._token_expires_at = time.monotonic() + expires_in - 60
+
+        # Persist refreshed tokens
+        await save_tokens("microsoft", {
+            "access_token": payload["access_token"],
+            "refresh_token": payload.get("refresh_token", tokens["refresh_token"]),
+            "expires_in": expires_in,
+            "scope": payload.get("scope", ""),
+        })
+
+        logger.debug("Refreshed delegated token (expires_in=%d)", expires_in)
         return self._access_token
 
     async def _headers(self) -> dict[str, str]:
@@ -69,13 +128,23 @@ class MSGraphEmailProvider(EmailProvider):
             "Content-Type": "application/json",
         }
 
+    @property
+    def _graph_user_prefix(self) -> str:
+        """Return the Graph API user path.
+
+        Delegated mode uses /me, client-credentials uses /users/{email}.
+        """
+        if self._use_delegated:
+            return f"{GRAPH_BASE}/me"
+        return f"{GRAPH_BASE}/users/{self._user_email}"
+
     # ------------------------------------------------------------------
     # EmailProvider implementation
     # ------------------------------------------------------------------
 
     async def list_recruiter_emails(self, limit: int = 20) -> list[RawEmail]:
         """Fetch unread messages from the user's mailbox, newest first."""
-        url = f"{GRAPH_BASE}/users/{self._user_email}/messages"
+        url = f"{self._graph_user_prefix}/messages"
         params = {
             "$filter": "isRead eq false",
             "$top": str(limit),
@@ -129,7 +198,7 @@ class MSGraphEmailProvider(EmailProvider):
 
     async def send_reply(self, message_id: str, body: str) -> bool:
         """Reply to a message by its Graph message ID."""
-        url = f"{GRAPH_BASE}/users/{self._user_email}/messages/{message_id}/reply"
+        url = f"{self._graph_user_prefix}/messages/{message_id}/reply"
         payload = {
             "message": {
                 "body": {
@@ -160,7 +229,7 @@ class MSGraphEmailProvider(EmailProvider):
 
     async def mark_read(self, message_id: str) -> bool:
         """Mark a single message as read."""
-        url = f"{GRAPH_BASE}/users/{self._user_email}/messages/{message_id}"
+        url = f"{self._graph_user_prefix}/messages/{message_id}"
         payload = {"isRead": True}
 
         try:

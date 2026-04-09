@@ -103,6 +103,14 @@ class DelegateRuntime:
                 callback=self._run_recruiter_pipeline,
             )
 
+        # Budget reset job — runs every hour, resets at midnight UTC
+        self.schedule_recurring(
+            name="budget-reset",
+            delegate_id="_system",
+            interval_seconds=3600,
+            callback=self._maybe_reset_budgets,
+        )
+
         for job in self._jobs:
             task = asyncio.create_task(
                 self._poll_loop(job), name=job.name
@@ -183,3 +191,10 @@ class DelegateRuntime:
         )
         if ctx.errors:
             logger.warning("Recruiter pipeline errors: %s", ctx.errors)
+
+    @staticmethod
+    async def _maybe_reset_budgets() -> None:
+        """Check if it's a new UTC day and reset budgets if so."""
+        from policy.budget import reset_daily_budgets
+        # reset_daily_budgets internally checks if the day has changed
+        await reset_daily_budgets()

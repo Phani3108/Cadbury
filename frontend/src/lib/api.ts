@@ -196,6 +196,42 @@ export const digest = {
     request<{ status: string }>(`/v1/digest/send?period=${period}`, { method: "POST" }),
 };
 
+// ─── Budgets ──────────────────────────────────────────────────────────────────
+
+export interface BudgetResponse {
+  delegate_id: string;
+  daily_token_limit: number;
+  daily_cost_limit_usd: number;
+  tokens_used_today: number;
+  cost_used_today_usd: number;
+  total_tokens_all_time: number;
+  total_cost_all_time_usd: number;
+  is_over_budget: boolean;
+  token_usage_pct: number;
+  cost_usage_pct: number;
+}
+
+export const budgets = {
+  get: (delegateId: string) =>
+    request<BudgetResponse>(`/v1/budgets/${delegateId}`),
+  update: (delegateId: string, data: { daily_token_limit?: number; daily_cost_limit_usd?: number }) =>
+    request<BudgetResponse>(`/v1/budgets/${delegateId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  listAll: () =>
+    request<{ budgets: BudgetResponse[]; global_usage: Record<string, unknown> }>("/v1/budgets"),
+};
+
+// ─── Auth / OAuth ─────────────────────────────────────────────────────────────
+
+export const auth = {
+  status: () => request<{ microsoft: boolean; google: boolean }>("/v1/auth/status"),
+  disconnect: (provider: string) =>
+    request<{ disconnected: boolean }>(`/v1/auth/${provider}/disconnect`, { method: "POST" }),
+  loginUrl: (provider: string) => `${API_BASE}/v1/auth/${provider}/login`,
+};
+
 // ─── Bundled export ───────────────────────────────────────────────────────────
 
 export const api = {
@@ -210,4 +246,6 @@ export const api = {
   notifications,
   contacts,
   digest,
+  budgets,
+  auth,
 };

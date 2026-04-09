@@ -14,6 +14,8 @@ from config.settings import settings
 from memory.graph import init_db
 from middleware.auth import require_auth
 from policy.allowlist import init_allowlist
+from skills.auth.token_store import init_token_store
+from policy.budget import init_budget_store
 from runtime.kernel import DelegateRuntime, set_runtime
 
 
@@ -22,6 +24,8 @@ async def lifespan(app: FastAPI):
     # Startup
     await init_db()
     await init_allowlist()
+    await init_token_store()
+    await init_budget_store()
     runtime = DelegateRuntime()
     set_runtime(runtime)
     await runtime.start()
@@ -64,6 +68,8 @@ from api.routes.notifications import router as notifications_router
 from api.routes.contacts import router as contacts_router
 from api.routes.calendar import router as calendar_router
 from api.routes.settings import router as settings_router
+from api.routes.oauth import router as oauth_router
+from api.routes.budgets import router as budgets_router
 
 app.include_router(goals_router)
 app.include_router(approvals_router)
@@ -75,6 +81,8 @@ app.include_router(notifications_router)
 app.include_router(contacts_router)
 app.include_router(calendar_router)
 app.include_router(settings_router)
+app.include_router(oauth_router)
+app.include_router(budgets_router)
 
 
 @app.get("/health")

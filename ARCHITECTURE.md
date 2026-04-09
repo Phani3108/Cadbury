@@ -75,15 +75,27 @@ backend/
 │   ├── models.py               # TrustZone, DelegationPolicy, ActionPermission
 │   ├── loader.py               # Load YAML policies
 │   ├── simulator.py            # Test policy changes on historical data
-│   └── allowlist.py            # Sender allowlist (SQLite-backed, env-seeded)
+│   ├── allowlist.py            # Sender allowlist (SQLite-backed, env-seeded)
+│   └── budget.py               # Per-delegate LLM budget enforcement
 ├── runtime/
 │   ├── kernel.py               # DelegateRuntime: scheduler, pause/resume, one-shot
+│   ├── event_bus.py            # In-memory pub/sub with SSE broadcast
+│   └── coordinator.py          # Cross-delegate event routing
 │   └── event_bus.py            # In-memory pub/sub with SSE broadcast
 ├── skills/
-│   ├── llm_client.py           # Tiered LLM (cheap/heavy) with usage tracking
-│   ├── email/                  # Email ingestion (MS Graph + mock)
+│   ├── llm_client.py           # Tiered LLM (cheap/heavy) with usage tracking + budget gating
+│   ├── email/                  # Email ingestion (MS Graph delegated + client-creds + mock)
 │   ├── calendar/               # Calendar provider abstraction
+│   │   ├── provider.py         # CalendarProvider ABC
+│   │   ├── mock.py             # Mock for development
+│   │   ├── google.py           # Google Calendar (OAuth2 delegated)
+│   │   ├── msgraph.py          # MS Graph Calendar (OAuth2 delegated)
+│   │   └── multi.py            # Multi-provider merger (combines all connected providers)
 │   ├── company/enricher.py     # 3-tier: JD parsing → Wikipedia → Apollo
+│   ├── auth/                   # OAuth2 token management
+│   │   └── token_store.py      # Encrypted at-rest token storage (Fernet + SQLite)
+│   ├── actions/                # Post-approval action executors
+│   │   └── __init__.py         # execute_send_email (picks provider, sends, updates status)
 │   └── notifications/
 │       ├── digest_sender.py    # Daily/weekly digest
 │       └── telegram.py         # Telegram Bot API notifications
@@ -168,9 +180,11 @@ All pipeline stages emit `DelegateEvent` objects into an in-memory event bus. Th
 
 | Layer | Mechanism |
 |-------|-----------|
-| **API Auth** | Bearer token (`API_KEY` env var). All endpoints require auth except `/health`, `/docs`, SSE stream. Dev mode passthrough when unset. |
+| **API Auth** | Bearer token (`API_KEY` env var). All endpoints require auth except `/health`, `/docs`, SSE stream, OAuth callbacks. Dev mode passthrough when unset. |
+| **OAuth2** | PKCE authorization code flow for Microsoft (email + calendar) and Google (calendar). Tokens encrypted at rest via Fernet (derived from `SECRET_KEY`). |
 | **Allowlist** | SQLite-backed sender allowlist. Seeded from `ALLOWLIST` env var. LLM cannot modify. |
 | **Policy Engine** | Trust zones gate what delegates can auto-act on. `block` zone is absolute. |
+| **Budget Enforcement** | Per-delegate daily token/cost limits. LLM calls blocked when over budget. Auto-pause delegate. Daily reset at midnight UTC. |
 | **LLM Isolation** | API keys and secrets never in LLM context. Tiered model routing (cheap for extraction, heavy for drafting). |
 | **Audit Trail** | Every delegate action emits a `DelegateEvent`. Every human decision logged in `decision_log`. Full replay capability. |
 
@@ -194,6 +208,25 @@ Primary tables in `data/delegates.db`:
 | `memories` | Tier 1 knowledge — always in LLM context |
 | `scratchpad` | Tier 2 knowledge — titles in context, body on-demand |
 | `allowlist` | Approved senders/identifiers by service |
+| `oauth_tokens` | Encrypted OAuth2 tokens per provider |
+| `delegate_budgets` | Per-delegate daily token/cost limits and usage |
+
+---
+
+## Cross-Delegate Coordination
+
+Events from one delegate can trigger actions in another via `runtime/coordinator.py`:
+
+| Trigger | Source → Target | Action |
+|---------|-----------------|--------|
+| High-match opportunity (≥ 0.80) | Recruiter → Calendar | Auto-run calendar pipeline to find interview slots |
+
+The coordinator listens to all events published on the event bus. When it sees a `CALENDAR_PREBLOCK_REQUESTED` event, it spins up the calendar pipeline with the `MultiCalendarProvider` (merging Google + Outlook availability).
+
+Future cross-delegate wires (Phase 4):
+- Finance subscription alert → Comms drafts cancellation email
+- Learning skill gap → Shopping finds relevant books/courses
+- Health appointment → Calendar blocks time
 
 ---
 
@@ -231,9 +264,24 @@ cd frontend && npm run dev
 
 Environment variables (`.env`):
 ```
+# Core
 OPENAI_API_KEY=sk-...
-API_KEY=your-bearer-token          # Optional in dev
-TELEGRAM_BOT_TOKEN=123:ABC...      # Optional
-TELEGRAM_CHAT_ID=123456789         # Optional
+SECRET_KEY=change-me-in-production     # Used for token encryption
+API_KEY=your-bearer-token              # Optional in dev
+
+# Microsoft Graph (email + calendar)
+MSGRAPH_CLIENT_ID=...
+MSGRAPH_CLIENT_SECRET=...              # Optional for PKCE-only flow
+MSGRAPH_TENANT_ID=...                  # Or "common" for multi-tenant
+
+# Google Calendar
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+
+# Notifications
+TELEGRAM_BOT_TOKEN=123:ABC...          # Optional
+TELEGRAM_CHAT_ID=123456789             # Optional
+
+# Security
 ALLOWLIST=recruiter@example.com,trusted@corp.com  # Optional, comma-separated
 ```

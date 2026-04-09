@@ -26,6 +26,7 @@ PUBLIC_ROUTES: set[str] = {
 
 PUBLIC_PREFIXES: tuple[str, ...] = (
     "/v1/events/stream",  # SSE — uses token query param instead
+    "/v1/auth/",          # OAuth callbacks must be accessible unauthenticated
 )
 
 

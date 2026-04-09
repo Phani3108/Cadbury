@@ -26,7 +26,7 @@ def unsubscribe(token: str) -> None:
 
 
 async def publish_event(event: "DelegateEvent") -> None:
-    """Broadcast event to all SSE subscribers."""
+    """Broadcast event to all SSE subscribers and dispatch cross-delegate actions."""
     payload = event.model_dump(mode="json")
     dead = []
     for token, queue in _subscribers.items():
@@ -36,6 +36,13 @@ async def publish_event(event: "DelegateEvent") -> None:
             dead.append(token)
     for token in dead:
         unsubscribe(token)
+
+    # Cross-delegate coordination (fire-and-forget)
+    try:
+        from runtime.coordinator import dispatch_cross_delegate_event
+        asyncio.create_task(dispatch_cross_delegate_event(event))
+    except Exception:
+        pass
 
 
 async def publish_typed_event(sse_type: str, data: dict) -> None:
