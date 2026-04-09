@@ -1,6 +1,11 @@
 """
-SQLite-backed memory graph.
-Stores: CareerGoals, RecruiterContact, JobOpportunity, ApprovalItem, DelegateEvent, DecisionLog.
+SQLite-backed memory graph with three-tier knowledge system.
+
+Tier 1: Memories — always injected into LLM context (user preferences, career goals, dealbreakers)
+Tier 2: Scratchpad — titles in context, body loaded on demand (recruiter history, company notes)
+Tier 3: Database — structured data (opportunities, scores, decision logs) — existing tables
+
+Also stores: CareerGoals, RecruiterContact, JobOpportunity, ApprovalItem, DelegateEvent, DecisionLog.
 """
 
 from __future__ import annotations
@@ -134,6 +139,25 @@ async def init_db() -> None:
                 value       TEXT NOT NULL,
                 updated_at  TEXT NOT NULL,
                 PRIMARY KEY (delegate_id, key)
+            );
+
+            -- Tier 1: Memories — always injected into LLM system prompt
+            CREATE TABLE IF NOT EXISTS memories (
+                memory_id  TEXT PRIMARY KEY,
+                content    TEXT NOT NULL,
+                category   TEXT NOT NULL DEFAULT 'general',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            -- Tier 2: Scratchpad — title injected, body loaded on demand
+            CREATE TABLE IF NOT EXISTS scratchpad (
+                entry_id   TEXT PRIMARY KEY,
+                title      TEXT NOT NULL,
+                body       TEXT NOT NULL,
+                category   TEXT NOT NULL DEFAULT 'general',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
         """)
         # Add thread_id column if missing (migration-safe)
@@ -661,3 +685,96 @@ class MemoryGraph:
 
     async def save_notification(self, notif: Notification) -> Notification:
         return await save_notification(notif)
+
+
+# ─── Tier 1: Memories (always in LLM context) ─────────────────────────────────
+
+async def save_memory(memory_id: str, content: str, category: str = "general") -> dict:
+    async with db() as conn:
+        now = datetime.now(timezone.utc).isoformat()
+        await conn.execute(
+            """
+            INSERT INTO memories (memory_id, content, category, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(memory_id) DO UPDATE SET content=excluded.content, category=excluded.category, updated_at=excluded.updated_at
+            """,
+            (memory_id, content, category, now, now),
+        )
+        await conn.commit()
+    return {"memory_id": memory_id, "content": content, "category": category}
+
+
+async def list_memories() -> list[dict]:
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            "SELECT memory_id, content, category, created_at FROM memories ORDER BY created_at"
+        )
+        return [dict(r) for r in rows]
+
+
+async def delete_memory(memory_id: str) -> None:
+    async with db() as conn:
+        await conn.execute("DELETE FROM memories WHERE memory_id = ?", (memory_id,))
+        await conn.commit()
+
+
+async def get_all_memory_text() -> str:
+    """Return all memories as a single string for LLM system prompt injection."""
+    memories = await list_memories()
+    if not memories:
+        return ""
+    lines = [f"- {m['content']}" for m in memories]
+    return "## User Memories (always consider these)\n" + "\n".join(lines)
+
+
+# ─── Tier 2: Scratchpad (titles in context, body on demand) ───────────────────
+
+async def save_scratchpad_entry(entry_id: str, title: str, body: str, category: str = "general") -> dict:
+    async with db() as conn:
+        now = datetime.now(timezone.utc).isoformat()
+        await conn.execute(
+            """
+            INSERT INTO scratchpad (entry_id, title, body, category, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(entry_id) DO UPDATE SET title=excluded.title, body=excluded.body, category=excluded.category, updated_at=excluded.updated_at
+            """,
+            (entry_id, title, body, category, now, now),
+        )
+        await conn.commit()
+    return {"entry_id": entry_id, "title": title, "category": category}
+
+
+async def list_scratchpad_titles() -> list[dict]:
+    """Return only titles (for LLM context injection — body loaded on demand)."""
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            "SELECT entry_id, title, category, updated_at FROM scratchpad ORDER BY updated_at DESC"
+        )
+        return [dict(r) for r in rows]
+
+
+async def get_scratchpad_entry(entry_id: str) -> Optional[dict]:
+    """Load full entry body (on-demand, not always in context)."""
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            "SELECT entry_id, title, body, category, created_at, updated_at FROM scratchpad WHERE entry_id = ?",
+            (entry_id,),
+        )
+        if rows:
+            return dict(rows[0])
+        return None
+
+
+async def delete_scratchpad_entry(entry_id: str) -> None:
+    async with db() as conn:
+        await conn.execute("DELETE FROM scratchpad WHERE entry_id = ?", (entry_id,))
+        await conn.commit()
+
+
+async def get_scratchpad_titles_text() -> str:
+    """Return scratchpad titles as text for LLM context — body NOT included."""
+    titles = await list_scratchpad_titles()
+    if not titles:
+        return ""
+    lines = [f"- [{t['entry_id']}] {t['title']}" for t in titles]
+    return "## Available Scratchpad Topics (ask to load details)\n" + "\n".join(lines)

@@ -14,13 +14,13 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-key-change-in-prod"
     debug: bool = True
 
+    # Auth — if empty, auth is disabled (dev mode only)
+    api_key: str = ""
+
     # LLM
     openai_api_key: str = ""
     openai_model_cheap: str = "gpt-4o-mini"
     openai_model_heavy: str = "gpt-4o"
-
-    # Redis
-    redis_url: str = "redis://localhost:6379"
 
     # Database
     database_url: str = "sqlite+aiosqlite:///./data/delegates.db"
@@ -40,8 +40,15 @@ class Settings(BaseSettings):
     # Calendar
     calendar_preblock_threshold: float = 0.80
 
+    # Telegram notifications
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+
     # CORS
     frontend_url: str = "http://localhost:3000"
+
+    # Allowlist — comma-separated emails/identifiers permitted to trigger actions
+    allowlist: str = ""
 
 
 settings = Settings()

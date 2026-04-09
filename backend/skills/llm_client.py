@@ -1,14 +1,68 @@
-"""Tiered LLM client — cheap model for extraction, heavy model for drafting."""
+"""Tiered LLM client — cheap model for extraction, heavy model for drafting.
+
+Includes token usage tracking for cost visibility. Every call logs tokens used
+and accumulates per-session totals accessible via get_usage_stats().
+"""
 from __future__ import annotations
 
 import json
+import logging
+import time
+from dataclasses import dataclass, field
 from typing import Any
 
 from openai import AsyncOpenAI
 
 from config.settings import get_settings
 
+logger = logging.getLogger(__name__)
+
 _client: AsyncOpenAI | None = None
+
+
+# ─── Usage Tracking ──────────────────────────────────────────────────────────
+
+@dataclass
+class _UsageStats:
+    """Accumulated LLM usage since process start."""
+    total_calls: int = 0
+    total_prompt_tokens: int = 0
+    total_completion_tokens: int = 0
+    total_tokens: int = 0
+    calls_by_tier: dict[str, int] = field(default_factory=lambda: {"cheap": 0, "heavy": 0})
+    tokens_by_tier: dict[str, int] = field(default_factory=lambda: {"cheap": 0, "heavy": 0})
+
+
+_usage = _UsageStats()
+
+
+def get_usage_stats() -> dict:
+    """Return current LLM usage statistics."""
+    return {
+        "total_calls": _usage.total_calls,
+        "total_prompt_tokens": _usage.total_prompt_tokens,
+        "total_completion_tokens": _usage.total_completion_tokens,
+        "total_tokens": _usage.total_tokens,
+        "calls_by_tier": dict(_usage.calls_by_tier),
+        "tokens_by_tier": dict(_usage.tokens_by_tier),
+    }
+
+
+def _track_usage(response, tier: str) -> None:
+    """Record token usage from an API response."""
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return
+    _usage.total_calls += 1
+    _usage.total_prompt_tokens += usage.prompt_tokens
+    _usage.total_completion_tokens += usage.completion_tokens
+    _usage.total_tokens += usage.total_tokens
+    _usage.calls_by_tier[tier] = _usage.calls_by_tier.get(tier, 0) + 1
+    _usage.tokens_by_tier[tier] = _usage.tokens_by_tier.get(tier, 0) + usage.total_tokens
+    logger.info(
+        "LLM call [%s]: %d prompt + %d completion = %d tokens",
+        tier, usage.prompt_tokens, usage.completion_tokens, usage.total_tokens,
+    )
 
 
 def _get_client() -> AsyncOpenAI:
@@ -26,13 +80,14 @@ def _get_client() -> AsyncOpenAI:
 async def chat(messages: list[dict], tier: str = "cheap") -> str:
     """Send a chat completion request. tier='cheap' or 'heavy'."""
     settings = get_settings()
-    model = settings.OPENAI_MODEL_HEAVY if tier == "heavy" else settings.OPENAI_MODEL_CHEAP
+    model = settings.openai_model_heavy if tier == "heavy" else settings.openai_model_cheap
     client = _get_client()
     response = await client.chat.completions.create(
         model=model,
         messages=messages,
         temperature=0.2,
     )
+    _track_usage(response, tier)
     return response.choices[0].message.content or ""
 
 
@@ -41,7 +96,7 @@ async def extract_json(system_prompt: str, user_content: str) -> dict[str, Any]:
     settings = get_settings()
     client = _get_client()
     response = await client.chat.completions.create(
-        model=settings.OPENAI_MODEL_CHEAP,
+        model=settings.openai_model_cheap,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
@@ -68,4 +123,5 @@ async def extract_json(system_prompt: str, user_content: str) -> dict[str, Any]:
     )
     tool_call = response.choices[0].message.tool_calls[0]
     args = json.loads(tool_call.function.arguments)
+    _track_usage(response, "cheap")
     return args.get("result", {})

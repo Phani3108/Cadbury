@@ -7,11 +7,13 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config.settings import settings
 from memory.graph import init_db
+from middleware.auth import require_auth
+from policy.allowlist import init_allowlist
 from runtime.kernel import DelegateRuntime, set_runtime
 
 
@@ -19,11 +21,15 @@ from runtime.kernel import DelegateRuntime, set_runtime
 async def lifespan(app: FastAPI):
     # Startup
     await init_db()
+    await init_allowlist()
     runtime = DelegateRuntime()
     set_runtime(runtime)
     await runtime.start()
     print("✓ Database initialized")
+    print("✓ Allowlist loaded")
     print("✓ Delegate runtime started")
+    if not settings.api_key:
+        print("⚠ No API_KEY set — authentication disabled (dev mode)")
     yield
     # Shutdown
     await runtime.stop()
@@ -35,6 +41,7 @@ app = FastAPI(
     description="Consumer-facing AI agent system with specialized delegates per life domain",
     version="0.1.0",
     lifespan=lifespan,
+    dependencies=[Depends(require_auth)],
 )
 
 # CORS
