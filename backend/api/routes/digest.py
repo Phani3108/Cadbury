@@ -8,7 +8,7 @@ import logging
 
 from fastapi import APIRouter, Query
 
-from skills.notifications.digest_sender import generate_digest
+from skills.notifications.digest_sender import generate_digest, generate_cross_delegate_digest
 
 logger = logging.getLogger(__name__)
 
@@ -16,32 +16,31 @@ router = APIRouter(prefix="/v1/digest", tags=["digest"])
 
 
 @router.get("")
-async def get_digest(period: str = Query(default="daily", regex="^(daily|weekly)$")):
+async def get_digest(
+    period: str = Query(default="daily", regex="^(daily|weekly)$"),
+    scope: str = Query(default="all", regex="^(all|recruiter)$"),
+):
     """
     Generate a digest report for the given period.
-
-    Args:
-        period: Either "daily" (last 24 hours) or "weekly" (last 7 days).
-
-    Returns:
-        The digest report as a JSON dict.
+    scope=all returns cross-delegate digest, scope=recruiter returns recruiter-only.
     """
-    report = await generate_digest(period=period)
+    if scope == "all":
+        report = await generate_cross_delegate_digest(period=period)
+    else:
+        report = await generate_digest(period=period)
     return dataclasses.asdict(report)
 
 
 @router.post("/send")
 async def send_digest(period: str = Query(default="daily", regex="^(daily|weekly)$")):
-    """
-    Placeholder endpoint for sending a digest report via email.
+    """Generate cross-delegate digest and send to all configured channels."""
+    report = await generate_cross_delegate_digest(period=period)
 
-    Actual email sending will be implemented in a future iteration.
-
-    Args:
-        period: Either "daily" or "weekly".
-
-    Returns:
-        Status confirmation with the period.
-    """
-    logger.info("Digest send requested for period=%s (placeholder)", period)
-    return {"status": "sent", "period": period}
+    try:
+        from skills.channels.providers import send_to_all_configured_channels
+        results = await send_to_all_configured_channels(report.summary)
+        logger.info("Digest sent to channels: %s", results)
+        return {"status": "sent", "period": period, "channels": results}
+    except Exception as exc:
+        logger.error("Failed to send digest: %s", exc)
+        return {"status": "partial", "period": period, "error": str(exc)}

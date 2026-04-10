@@ -14,6 +14,14 @@ import type {
   DigestReport,
   RecruiterContact,
   SimulationResult,
+  CommsMessage,
+  FinanceTransaction,
+  FinanceSubscription,
+  WatchItem,
+  LearningPath,
+  HealthRoutine,
+  HealthAppointment,
+  SystemHealth,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -190,10 +198,104 @@ export const contacts = {
 // ─── Digest ───────────────────────────────────────────────────────────────────
 
 export const digest = {
-  get: (period: "daily" | "weekly" = "daily") =>
-    request<DigestReport>(`/v1/digest?period=${period}`),
+  get: (period: "daily" | "weekly" = "daily", scope: "all" | "recruiter" = "all") =>
+    request<DigestReport>(`/v1/digest?period=${period}&scope=${scope}`),
   send: (period: "daily" | "weekly" = "daily") =>
-    request<{ status: string }>(`/v1/digest/send?period=${period}`, { method: "POST" }),
+    request<{ status: string; channels?: Record<string, boolean> }>(`/v1/digest/send?period=${period}`, { method: "POST" }),
+};
+
+// ─── Comms ────────────────────────────────────────────────────────────────────
+
+export const comms = {
+  messages: (channel?: string, limit = 50) => {
+    const qs = new URLSearchParams();
+    if (channel) qs.set("channel", channel);
+    qs.set("limit", String(limit));
+    return request<CommsMessage[]>(`/v1/comms/messages?${qs}`);
+  },
+  ingest: (data: { channel: string; sender: string; sender_name?: string; subject?: string; body?: string }) =>
+    request<{ ingested: number; classified: number; drafts: number }>("/v1/comms/ingest", {
+      method: "POST", body: JSON.stringify(data),
+    }),
+};
+
+// ─── Finance ──────────────────────────────────────────────────────────────────
+
+export const finance = {
+  transactions: (limit = 100) =>
+    request<FinanceTransaction[]>(`/v1/finance/transactions?limit=${limit}`),
+  addTransaction: (data: { amount: number; merchant: string; category?: string; notes?: string }) =>
+    request<{ ingested: number; alerts: unknown[] }>("/v1/finance/transactions", {
+      method: "POST", body: JSON.stringify(data),
+    }),
+  subscriptions: (status?: string) => {
+    const qs = status ? `?status=${status}` : "";
+    return request<FinanceSubscription[]>(`/v1/finance/subscriptions${qs}`);
+  },
+  cancelSubscription: (id: string) =>
+    request<{ status: string }>(`/v1/finance/subscriptions/${id}/cancel`, { method: "POST" }),
+};
+
+// ─── Shopping ─────────────────────────────────────────────────────────────────
+
+export const shopping = {
+  watchlist: (status?: string) => {
+    const qs = status ? `?status=${status}` : "";
+    return request<WatchItem[]>(`/v1/shopping/watchlist${qs}`);
+  },
+  addItem: (data: { name: string; target_price?: number; url?: string; retailer?: string }) =>
+    request<WatchItem>("/v1/shopping/watchlist", {
+      method: "POST", body: JSON.stringify(data),
+    }),
+  updatePrice: (itemId: string, price: number) =>
+    request<{ items_checked: number; price_drops: unknown[] }>(`/v1/shopping/watchlist/${itemId}/update-price`, {
+      method: "POST", body: JSON.stringify({ item_id: itemId, price }),
+    }),
+  removeItem: (itemId: string) =>
+    request<{ status: string }>(`/v1/shopping/watchlist/${itemId}`, { method: "DELETE" }),
+};
+
+// ─── Learning ─────────────────────────────────────────────────────────────────
+
+export const learningPaths = {
+  list: () => request<LearningPath[]>("/v1/learning/paths"),
+  get: (pathId: string) => request<LearningPath>(`/v1/learning/paths/${pathId}`),
+  assess: () =>
+    request<{ skill_gaps: { skill: string; priority: string }[]; paths_created: number }>("/v1/learning/assess", { method: "POST" }),
+  completeResource: (pathId: string, resourceIndex: number, completed: boolean) =>
+    request<{ progress_pct: number }>(`/v1/learning/paths/${pathId}/complete-resource`, {
+      method: "POST", body: JSON.stringify({ resource_index: resourceIndex, completed }),
+    }),
+};
+
+// ─── Health ───────────────────────────────────────────────────────────────────
+
+export const health = {
+  routines: (activeOnly = true) =>
+    request<HealthRoutine[]>(`/v1/health/routines?active_only=${activeOnly}`),
+  addRoutine: (data: { name: string; routine_type?: string; frequency?: string; time_of_day?: string }) =>
+    request<HealthRoutine>("/v1/health/routines", {
+      method: "POST", body: JSON.stringify(data),
+    }),
+  logRoutine: (routineId: string) =>
+    request<{ logged: boolean; streak: number }>(`/v1/health/routines/${routineId}/log`, { method: "POST" }),
+  appointments: (status?: string) => {
+    const qs = status ? `?status=${status}` : "";
+    return request<HealthAppointment[]>(`/v1/health/appointments${qs}`);
+  },
+  addAppointment: (data: { title: string; provider?: string; appointment_type?: string; scheduled_at?: string; notes?: string }) =>
+    request<HealthAppointment>("/v1/health/appointments", {
+      method: "POST", body: JSON.stringify(data),
+    }),
+  check: () =>
+    request<{ routines_checked: number; reminders: string[]; alerts: string[] }>("/v1/health/check", { method: "POST" }),
+};
+
+// ─── Observability ────────────────────────────────────────────────────────────
+
+export const observability = {
+  health: () => request<SystemHealth>("/v1/observability/health"),
+  metrics: () => request<Record<string, unknown>>("/v1/observability/metrics"),
 };
 
 // ─── Budgets ──────────────────────────────────────────────────────────────────
@@ -248,4 +350,10 @@ export const api = {
   digest,
   budgets,
   auth,
+  comms,
+  finance,
+  shopping,
+  learningPaths,
+  health,
+  observability,
 };

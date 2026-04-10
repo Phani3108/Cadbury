@@ -1,0 +1,30 @@
+version: 1
+delegate_id: health
+
+risk_boundary:
+  max_financial_commitment: 0.0
+  max_calendar_commitment_hours: 2.0
+  max_autonomy_score: 0.35
+
+thresholds:
+  min_score_for_engagement: 0.50
+  auto_decline_below: 0.10
+  auto_decline_threshold: 0.05
+
+allowed_actions:
+  - action: send_reminder
+    action_label: "Send health reminder"
+    auto_approve: true
+    zone: auto
+  - action: log_routine
+    action_label: "Log routine completion"
+    auto_approve: true
+    zone: auto
+  - action: reschedule_appointment
+    action_label: "Reschedule appointment"
+    auto_approve: false
+    zone: review
+  - action: book_appointment
+    action_label: "Book new appointment"
+    auto_approve: false
+    zone: review

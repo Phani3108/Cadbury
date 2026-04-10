@@ -38,6 +38,32 @@ class EventType(StrEnum):
     CALENDAR_PREBLOCK_REQUESTED = "calendar_preblock_requested"
     CALENDAR_SLOTS_FOUND = "calendar_slots_found"
     CALENDAR_PROPOSED = "calendar_proposed"
+    # Comms delegate
+    MESSAGE_RECEIVED = "message_received"
+    MESSAGE_CLASSIFIED = "message_classified"
+    MESSAGE_ROUTED = "message_routed"
+    MESSAGE_DRAFTED = "message_drafted"
+    MESSAGE_SENT = "message_sent"
+    MESSAGE_ARCHIVED = "message_archived"
+    # Finance delegate
+    TRANSACTION_INGESTED = "transaction_ingested"
+    RECURRING_DETECTED = "recurring_detected"
+    SPENDING_ALERT = "spending_alert"
+    SUBSCRIPTION_FLAGGED = "subscription_flagged"
+    # Shopping delegate
+    PRICE_TRACKED = "price_tracked"
+    PRICE_DROP = "price_drop"
+    DEAL_FOUND = "deal_found"
+    # Learning delegate
+    SKILL_ASSESSED = "skill_assessed"
+    LEARNING_PATH_CREATED = "learning_path_created"
+    LEARNING_PROGRESS = "learning_progress"
+    LEARNING_NUDGE = "learning_nudge"
+    # Health delegate
+    HEALTH_REMINDER = "health_reminder"
+    HEALTH_APPOINTMENT = "health_appointment"
+    HEALTH_ROUTINE_LOGGED = "health_routine_logged"
+    HEALTH_ALERT = "health_alert"
     POLICY_BLOCKED = "policy_blocked"
     NOTIFICATION_CREATED = "notification_created"
     ERROR = "error"
@@ -270,3 +296,153 @@ class SimulationRequest(BaseModel):
     auto_decline_below: float = 0.30
     auto_decline_threshold: float = 0.25
     period_days: int = 90
+
+
+# ─── Comms Models ─────────────────────────────────────────────────────────────
+
+class MessageChannel(StrEnum):
+    EMAIL = "email"
+    TELEGRAM = "telegram"
+    WHATSAPP = "whatsapp"
+    SLACK = "slack"
+    SMS = "sms"
+
+
+class MessagePriority(StrEnum):
+    URGENT = "urgent"
+    HIGH = "high"
+    NORMAL = "normal"
+    LOW = "low"
+    SPAM = "spam"
+
+
+class MessageCategory(StrEnum):
+    PERSONAL = "personal"
+    WORK = "work"
+    TRANSACTIONAL = "transactional"
+    SPAM = "spam"
+    URGENT = "urgent"
+    NEWSLETTER = "newsletter"
+
+
+class CommsMessage(BaseModel):
+    message_id: str = Field(default_factory=_uid)
+    channel: MessageChannel
+    sender: str
+    sender_name: str = ""
+    subject: str = ""
+    body: str = ""
+    priority: MessagePriority = MessagePriority.NORMAL
+    category: MessageCategory = MessageCategory.PERSONAL
+    reply_draft: Optional[str] = None
+    action_taken: str = ""  # archived, replied, forwarded, escalated
+    created_at: datetime = Field(default_factory=_now)
+
+
+# ─── Finance Models ──────────────────────────────────────────────────────────
+
+class TransactionCategory(StrEnum):
+    SUBSCRIPTION = "subscription"
+    FOOD = "food"
+    TRANSPORT = "transport"
+    ENTERTAINMENT = "entertainment"
+    SHOPPING = "shopping"
+    UTILITIES = "utilities"
+    HEALTHCARE = "healthcare"
+    INCOME = "income"
+    TRANSFER = "transfer"
+    OTHER = "other"
+
+
+class Transaction(BaseModel):
+    transaction_id: str = Field(default_factory=_uid)
+    amount: float
+    currency: str = "USD"
+    merchant: str
+    category: TransactionCategory = TransactionCategory.OTHER
+    date: datetime = Field(default_factory=_now)
+    is_recurring: bool = False
+    recurrence_period_days: Optional[int] = None
+    notes: str = ""
+
+
+class Subscription(BaseModel):
+    subscription_id: str = Field(default_factory=_uid)
+    merchant: str
+    amount: float
+    currency: str = "USD"
+    period_days: int = 30  # billing cycle
+    last_charged: Optional[datetime] = None
+    next_charge: Optional[datetime] = None
+    status: str = "active"  # active, cancelled, flagged
+    usage_rating: str = "unknown"  # high, medium, low, unused, unknown
+    cancel_instructions: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+# ─── Shopping Models ─────────────────────────────────────────────────────────
+
+class WatchItem(BaseModel):
+    item_id: str = Field(default_factory=_uid)
+    name: str
+    target_price: Optional[float] = None
+    current_price: Optional[float] = None
+    url: str = ""
+    retailer: str = ""
+    price_history: list[dict] = Field(default_factory=list)  # [{date, price}]
+    alert_on_drop: bool = True
+    status: str = "watching"  # watching, purchased, removed
+    created_at: datetime = Field(default_factory=_now)
+
+
+# ─── Learning Models ─────────────────────────────────────────────────────────
+
+class SkillGap(BaseModel):
+    skill: str
+    current_level: str = "beginner"  # beginner, intermediate, advanced
+    target_level: str = "intermediate"
+    priority: str = "medium"  # high, medium, low
+    related_roles: list[str] = Field(default_factory=list)
+
+
+class LearningPath(BaseModel):
+    path_id: str = Field(default_factory=_uid)
+    title: str
+    skill_gaps: list[SkillGap] = Field(default_factory=list)
+    resources: list[dict] = Field(default_factory=list)  # [{title, url, type, completed}]
+    progress_pct: float = 0.0
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+# ─── Health Models ────────────────────────────────────────────────────────────
+
+class HealthRoutineType(StrEnum):
+    MEDICATION = "medication"
+    EXERCISE = "exercise"
+    SLEEP = "sleep"
+    WATER = "water"
+    CUSTOM = "custom"
+
+
+class HealthRoutine(BaseModel):
+    routine_id: str = Field(default_factory=_uid)
+    name: str
+    routine_type: HealthRoutineType = HealthRoutineType.CUSTOM
+    frequency: str = "daily"  # daily, weekly, as_needed
+    time_of_day: str = ""  # morning, afternoon, evening, or HH:MM
+    last_logged: Optional[datetime] = None
+    streak_days: int = 0
+    active: bool = True
+    created_at: datetime = Field(default_factory=_now)
+
+
+class HealthAppointment(BaseModel):
+    appointment_id: str = Field(default_factory=_uid)
+    title: str
+    provider: str = ""  # doctor name / clinic
+    appointment_type: str = ""  # checkup, dental, specialist, etc.
+    scheduled_at: Optional[datetime] = None
+    status: str = "scheduled"  # scheduled, completed, cancelled, overdue
+    notes: str = ""
+    created_at: datetime = Field(default_factory=_now)

@@ -104,20 +104,6 @@ export default function DelegatesPage() {
         {items.map((d) => (
           <DelegateCard key={d.id} delegate={d} onToggle={() => togglePause(d)} />
         ))}
-
-        {/* Placeholder for upcoming delegates */}
-        {["finance", "comms", "shopping", "learning", "health"].map((id) => (
-          <div
-            key={id}
-            className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-6 flex flex-col items-center justify-center text-center"
-          >
-            <Bot className="h-8 w-8 text-slate-300 mb-2" />
-            <span className="text-sm font-medium text-slate-400 capitalize">
-              {id} Delegate
-            </span>
-            <span className="text-xs text-slate-300 mt-1">Coming soon</span>
-          </div>
-        ))}
       </div>
     </div>
   );

@@ -42,8 +42,8 @@ export default function DigestPage() {
 
   const statCards = [
     {
-      label: "New Opportunities",
-      value: stats.new_opportunities ?? 0,
+      label: "Events (24h)",
+      value: stats.total_events ?? stats.new_opportunities ?? 0,
       icon: Briefcase,
       color: "text-brand-500",
       bg: "bg-brand-50",
@@ -56,27 +56,27 @@ export default function DigestPage() {
       bg: "bg-amber-50",
     },
     {
-      label: "Auto-Declined",
-      value: stats.auto_declined ?? 0,
-      icon: XCircle,
-      color: "text-red-500",
-      bg: "bg-red-50",
-    },
-    {
-      label: "Avg Score",
-      value:
-        stats.avg_score != null
-          ? `${Math.round((stats.avg_score as number) * 100)}%`
-          : "--",
-      icon: TrendingUp,
+      label: "Messages Triaged",
+      value: stats.messages_triaged ?? stats.auto_declined ?? 0,
+      icon: CheckCircle2,
       color: "text-green-600",
       bg: "bg-green-50",
     },
     {
+      label: "Amount Spent",
+      value:
+        stats.amount_spent != null
+          ? `$${(stats.amount_spent as number).toFixed(0)}`
+          : "--",
+      icon: TrendingUp,
+      color: "text-violet-600",
+      bg: "bg-violet-50",
+    },
+    {
       label: "Time Saved",
       value:
-        stats.time_saved_hours != null
-          ? `${stats.time_saved_hours}h`
+        stats.time_saved_minutes != null
+          ? `${Math.round(stats.time_saved_minutes as number)}m`
           : "--",
       icon: Timer,
       color: "text-blue-600",

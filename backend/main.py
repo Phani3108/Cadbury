@@ -70,6 +70,12 @@ from api.routes.calendar import router as calendar_router
 from api.routes.settings import router as settings_router
 from api.routes.oauth import router as oauth_router
 from api.routes.budgets import router as budgets_router
+from api.routes.comms import router as comms_router
+from api.routes.finance import router as finance_router
+from api.routes.shopping import router as shopping_router
+from api.routes.learning import router as learning_router
+from api.routes.health import router as health_router
+from api.routes.observability import router as observability_router
 
 app.include_router(goals_router)
 app.include_router(approvals_router)
@@ -83,6 +89,12 @@ app.include_router(calendar_router)
 app.include_router(settings_router)
 app.include_router(oauth_router)
 app.include_router(budgets_router)
+app.include_router(comms_router)
+app.include_router(finance_router)
+app.include_router(shopping_router)
+app.include_router(learning_router)
+app.include_router(health_router)
+app.include_router(observability_router)
 
 
 @app.get("/health")

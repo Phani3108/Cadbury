@@ -212,6 +212,13 @@ async def reset_daily_budgets() -> int:
     return count
 
 
+async def get_all_budgets() -> list[dict]:
+    """Return all delegate budgets as dicts (for observability)."""
+    async with db() as conn:
+        rows = await conn.execute_fetchall("SELECT * FROM delegate_budgets")
+        return [dict(r) for r in rows]
+
+
 # ─── Internal helpers ─────────────────────────────────────────────────────────
 
 def _check_over_budget(budget: DelegateBudget) -> bool:

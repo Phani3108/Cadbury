@@ -24,12 +24,19 @@ from memory.models import (
     ApprovalStatus,
     CalendarEvent,
     CareerGoals,
+    CommsMessage,
     DecisionLog,
     DelegateEvent,
+    HealthAppointment,
+    HealthRoutine,
     JobOpportunity,
+    LearningPath,
     MatchBreakdown,
     Notification,
     RecruiterContact,
+    Subscription,
+    Transaction,
+    WatchItem,
 )
 
 DB_PATH = Path("data/delegates.db")
@@ -158,6 +165,78 @@ async def init_db() -> None:
                 category   TEXT NOT NULL DEFAULT 'general',
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            -- Comms messages
+            CREATE TABLE IF NOT EXISTS comms_messages (
+                message_id TEXT PRIMARY KEY,
+                channel    TEXT NOT NULL,
+                sender     TEXT NOT NULL,
+                priority   TEXT NOT NULL DEFAULT 'normal',
+                category   TEXT NOT NULL DEFAULT 'personal',
+                data       TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_comms_channel ON comms_messages(channel);
+            CREATE INDEX IF NOT EXISTS idx_comms_priority ON comms_messages(priority);
+
+            -- Finance transactions
+            CREATE TABLE IF NOT EXISTS transactions (
+                transaction_id TEXT PRIMARY KEY,
+                merchant       TEXT NOT NULL,
+                amount         REAL NOT NULL,
+                category       TEXT NOT NULL DEFAULT 'other',
+                is_recurring   INTEGER NOT NULL DEFAULT 0,
+                data           TEXT NOT NULL,
+                date           TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_tx_merchant ON transactions(merchant);
+
+            -- Subscriptions
+            CREATE TABLE IF NOT EXISTS subscriptions (
+                subscription_id TEXT PRIMARY KEY,
+                merchant        TEXT NOT NULL,
+                amount          REAL NOT NULL,
+                status          TEXT NOT NULL DEFAULT 'active',
+                data            TEXT NOT NULL,
+                created_at      TEXT NOT NULL
+            );
+
+            -- Shopping watch items
+            CREATE TABLE IF NOT EXISTS watch_items (
+                item_id    TEXT PRIMARY KEY,
+                name       TEXT NOT NULL,
+                status     TEXT NOT NULL DEFAULT 'watching',
+                data       TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            -- Learning paths
+            CREATE TABLE IF NOT EXISTS learning_paths (
+                path_id    TEXT PRIMARY KEY,
+                title      TEXT NOT NULL,
+                data       TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            -- Health routines
+            CREATE TABLE IF NOT EXISTS health_routines (
+                routine_id TEXT PRIMARY KEY,
+                name       TEXT NOT NULL,
+                active     INTEGER NOT NULL DEFAULT 1,
+                data       TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            -- Health appointments
+            CREATE TABLE IF NOT EXISTS health_appointments (
+                appointment_id TEXT PRIMARY KEY,
+                title          TEXT NOT NULL,
+                status         TEXT NOT NULL DEFAULT 'scheduled',
+                scheduled_at   TEXT,
+                data           TEXT NOT NULL,
+                created_at     TEXT NOT NULL
             );
         """)
         # Add thread_id column if missing (migration-safe)
@@ -685,6 +764,200 @@ class MemoryGraph:
 
     async def save_notification(self, notif: Notification) -> Notification:
         return await save_notification(notif)
+
+
+# ─── Comms Messages ──────────────────────────────────────────────────────────
+
+async def save_comms_message(msg: CommsMessage) -> CommsMessage:
+    async with db() as conn:
+        await conn.execute(
+            """INSERT INTO comms_messages(message_id, channel, sender, priority, category, data, created_at)
+               VALUES (?,?,?,?,?,?,?)
+               ON CONFLICT(message_id) DO UPDATE SET data=excluded.data, priority=excluded.priority, category=excluded.category""",
+            (msg.message_id, msg.channel, msg.sender, msg.priority, msg.category,
+             msg.model_dump_json(), msg.created_at.isoformat()),
+        )
+        await conn.commit()
+    return msg
+
+
+async def list_comms_messages(channel: Optional[str] = None, limit: int = 100) -> list[CommsMessage]:
+    async with db() as conn:
+        if channel:
+            rows = await conn.execute_fetchall(
+                "SELECT data FROM comms_messages WHERE channel = ? ORDER BY created_at DESC LIMIT ?",
+                (channel, limit),
+            )
+        else:
+            rows = await conn.execute_fetchall(
+                "SELECT data FROM comms_messages ORDER BY created_at DESC LIMIT ?", (limit,)
+            )
+        return [CommsMessage.model_validate_json(r["data"]) for r in rows]
+
+
+# ─── Finance: Transactions ───────────────────────────────────────────────────
+
+async def save_transaction(tx: Transaction) -> Transaction:
+    async with db() as conn:
+        await conn.execute(
+            """INSERT INTO transactions(transaction_id, merchant, amount, category, is_recurring, data, date)
+               VALUES (?,?,?,?,?,?,?)
+               ON CONFLICT(transaction_id) DO UPDATE SET data=excluded.data""",
+            (tx.transaction_id, tx.merchant, tx.amount, tx.category,
+             int(tx.is_recurring), tx.model_dump_json(), tx.date.isoformat()),
+        )
+        await conn.commit()
+    return tx
+
+
+async def list_transactions(limit: int = 200) -> list[Transaction]:
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            "SELECT data FROM transactions ORDER BY date DESC LIMIT ?", (limit,)
+        )
+        return [Transaction.model_validate_json(r["data"]) for r in rows]
+
+
+# ─── Finance: Subscriptions ─────────────────────────────────────────────────
+
+async def save_subscription(sub: Subscription) -> Subscription:
+    async with db() as conn:
+        await conn.execute(
+            """INSERT INTO subscriptions(subscription_id, merchant, amount, status, data, created_at)
+               VALUES (?,?,?,?,?,?)
+               ON CONFLICT(subscription_id) DO UPDATE SET data=excluded.data, status=excluded.status""",
+            (sub.subscription_id, sub.merchant, sub.amount, sub.status,
+             sub.model_dump_json(), sub.created_at.isoformat()),
+        )
+        await conn.commit()
+    return sub
+
+
+async def list_subscriptions(status: Optional[str] = None) -> list[Subscription]:
+    async with db() as conn:
+        if status:
+            rows = await conn.execute_fetchall(
+                "SELECT data FROM subscriptions WHERE status = ? ORDER BY created_at DESC", (status,)
+            )
+        else:
+            rows = await conn.execute_fetchall("SELECT data FROM subscriptions ORDER BY created_at DESC")
+        return [Subscription.model_validate_json(r["data"]) for r in rows]
+
+
+# ─── Shopping: Watch Items ───────────────────────────────────────────────────
+
+async def save_watch_item(item: WatchItem) -> WatchItem:
+    async with db() as conn:
+        await conn.execute(
+            """INSERT INTO watch_items(item_id, name, status, data, created_at)
+               VALUES (?,?,?,?,?)
+               ON CONFLICT(item_id) DO UPDATE SET data=excluded.data, status=excluded.status""",
+            (item.item_id, item.name, item.status, item.model_dump_json(), item.created_at.isoformat()),
+        )
+        await conn.commit()
+    return item
+
+
+async def list_watch_items(status: Optional[str] = None) -> list[WatchItem]:
+    async with db() as conn:
+        if status:
+            rows = await conn.execute_fetchall(
+                "SELECT data FROM watch_items WHERE status = ? ORDER BY created_at DESC", (status,)
+            )
+        else:
+            rows = await conn.execute_fetchall("SELECT data FROM watch_items ORDER BY created_at DESC")
+        return [WatchItem.model_validate_json(r["data"]) for r in rows]
+
+
+async def get_watch_item(item_id: str) -> Optional[WatchItem]:
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            "SELECT data FROM watch_items WHERE item_id = ?", (item_id,)
+        )
+        return WatchItem.model_validate_json(rows[0]["data"]) if rows else None
+
+
+# ─── Learning Paths ──────────────────────────────────────────────────────────
+
+async def save_learning_path(path: LearningPath) -> LearningPath:
+    path.updated_at = datetime.now(timezone.utc)
+    async with db() as conn:
+        await conn.execute(
+            """INSERT INTO learning_paths(path_id, title, data, created_at, updated_at)
+               VALUES (?,?,?,?,?)
+               ON CONFLICT(path_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at""",
+            (path.path_id, path.title, path.model_dump_json(),
+             path.created_at.isoformat(), path.updated_at.isoformat()),
+        )
+        await conn.commit()
+    return path
+
+
+async def list_learning_paths() -> list[LearningPath]:
+    async with db() as conn:
+        rows = await conn.execute_fetchall("SELECT data FROM learning_paths ORDER BY updated_at DESC")
+        return [LearningPath.model_validate_json(r["data"]) for r in rows]
+
+
+async def get_learning_path(path_id: str) -> Optional[LearningPath]:
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            "SELECT data FROM learning_paths WHERE path_id = ?", (path_id,)
+        )
+        return LearningPath.model_validate_json(rows[0]["data"]) if rows else None
+
+
+# ─── Health Routines ─────────────────────────────────────────────────────────
+
+async def save_health_routine(routine: HealthRoutine) -> HealthRoutine:
+    async with db() as conn:
+        await conn.execute(
+            """INSERT INTO health_routines(routine_id, name, active, data, created_at)
+               VALUES (?,?,?,?,?)
+               ON CONFLICT(routine_id) DO UPDATE SET data=excluded.data, active=excluded.active""",
+            (routine.routine_id, routine.name, int(routine.active),
+             routine.model_dump_json(), routine.created_at.isoformat()),
+        )
+        await conn.commit()
+    return routine
+
+
+async def list_health_routines(active_only: bool = True) -> list[HealthRoutine]:
+    async with db() as conn:
+        if active_only:
+            rows = await conn.execute_fetchall(
+                "SELECT data FROM health_routines WHERE active = 1 ORDER BY created_at"
+            )
+        else:
+            rows = await conn.execute_fetchall("SELECT data FROM health_routines ORDER BY created_at")
+        return [HealthRoutine.model_validate_json(r["data"]) for r in rows]
+
+
+# ─── Health Appointments ─────────────────────────────────────────────────────
+
+async def save_health_appointment(apt: HealthAppointment) -> HealthAppointment:
+    async with db() as conn:
+        await conn.execute(
+            """INSERT INTO health_appointments(appointment_id, title, status, scheduled_at, data, created_at)
+               VALUES (?,?,?,?,?,?)
+               ON CONFLICT(appointment_id) DO UPDATE SET data=excluded.data, status=excluded.status""",
+            (apt.appointment_id, apt.title, apt.status,
+             apt.scheduled_at.isoformat() if apt.scheduled_at else None,
+             apt.model_dump_json(), apt.created_at.isoformat()),
+        )
+        await conn.commit()
+    return apt
+
+
+async def list_health_appointments(status: Optional[str] = None) -> list[HealthAppointment]:
+    async with db() as conn:
+        if status:
+            rows = await conn.execute_fetchall(
+                "SELECT data FROM health_appointments WHERE status = ? ORDER BY scheduled_at", (status,)
+            )
+        else:
+            rows = await conn.execute_fetchall("SELECT data FROM health_appointments ORDER BY scheduled_at")
+        return [HealthAppointment.model_validate_json(r["data"]) for r in rows]
 
 
 # ─── Tier 1: Memories (always in LLM context) ─────────────────────────────────

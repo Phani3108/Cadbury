@@ -1,0 +1,30 @@
+version: 1
+delegate_id: finance
+
+risk_boundary:
+  max_financial_commitment: 0.0    # Finance never commits money
+  max_calendar_commitment_hours: 0.0
+  max_autonomy_score: 0.30        # Very conservative — all financial actions need review
+
+thresholds:
+  min_score_for_engagement: 0.50
+  auto_decline_below: 0.20
+  auto_decline_threshold: 0.10
+
+allowed_actions:
+  - action: review_charge
+    action_label: "Review unusual charge"
+    auto_approve: false
+    zone: review
+  - action: cancel_subscription
+    action_label: "Cancel subscription"
+    auto_approve: false
+    zone: review
+  - action: flag_recurring
+    action_label: "Flag recurring charge"
+    auto_approve: true
+    zone: auto
+  - action: categorize_transaction
+    action_label: "Auto-categorize transaction"
+    auto_approve: true
+    zone: auto

@@ -35,40 +35,84 @@ DELEGATE_REGISTRY = [
         status="active",
         last_active=None,
         stats=DelegateStats(),
-    )
+    ),
+    DelegateInfo(
+        id="calendar",
+        name="Calendar Delegate",
+        description="Manages scheduling across Google and Outlook calendars",
+        status="active",
+        last_active=None,
+        stats=DelegateStats(),
+    ),
+    DelegateInfo(
+        id="comms",
+        name="Comms Delegate",
+        description="Triages messages across email, Telegram, WhatsApp, Slack, and SMS",
+        status="active",
+        last_active=None,
+        stats=DelegateStats(),
+    ),
+    DelegateInfo(
+        id="finance",
+        name="Finance Delegate",
+        description="Tracks spending, detects subscriptions, and alerts on anomalies",
+        status="active",
+        last_active=None,
+        stats=DelegateStats(),
+    ),
+    DelegateInfo(
+        id="shopping",
+        name="Shopping Delegate",
+        description="Watches prices, detects deals, and recommends purchases",
+        status="active",
+        last_active=None,
+        stats=DelegateStats(),
+    ),
+    DelegateInfo(
+        id="learning",
+        name="Learning Delegate",
+        description="Identifies skill gaps, creates learning paths, and tracks progress",
+        status="active",
+        last_active=None,
+        stats=DelegateStats(),
+    ),
+    DelegateInfo(
+        id="health",
+        name="Health Delegate",
+        description="Tracks routines, manages appointments, and sends health reminders",
+        status="active",
+        last_active=None,
+        stats=DelegateStats(),
+    ),
 ]
 
 
-async def _get_recruiter_stats() -> DelegateStats:
-    """Compute live stats for the recruiter delegate."""
+async def _get_delegate_stats(delegate_id: str) -> DelegateStats:
+    """Compute live stats for any delegate."""
     from datetime import datetime, timezone, timedelta
     from memory.graph import list_opportunities, list_events
 
     pending = await list_approvals(ApprovalStatus.PENDING)
-    opps = await list_opportunities(500)
+    delegate_pending = [a for a in pending if a.delegate_id == delegate_id]
     today = datetime.now(timezone.utc).date()
     events_today = [
-        e for e in await list_events("recruiter", 500)
+        e for e in await list_events(delegate_id, 500)
         if e.timestamp.date() == today
     ]
 
-    scored = [o for o in opps if o.match_score > 0]
-    avg_score = sum(o.match_score for o in scored) / len(scored) if scored else 0.0
-
-    decisions = await list_decisions("recruiter", 500)
+    decisions = await list_decisions(delegate_id, 500)
     auto_count = sum(1 for d in decisions if not d.human_approved and d.action_taken.startswith("auto"))
     auto_rate = auto_count / len(decisions) if decisions else 0.0
 
-    # "processed today" = distinct opportunities touched today
-    opp_ids_today = {
-        e.payload.get("opportunity_id")
-        for e in events_today
-        if e.payload.get("opportunity_id")
-    }
+    avg_score = 0.0
+    if delegate_id == "recruiter":
+        opps = await list_opportunities(500)
+        scored = [o for o in opps if o.match_score > 0]
+        avg_score = sum(o.match_score for o in scored) / len(scored) if scored else 0.0
 
     return DelegateStats(
-        processed_today=len(opp_ids_today),
-        pending_approvals=len(pending),
+        processed_today=len(events_today),
+        pending_approvals=len(delegate_pending),
         auto_rate=round(auto_rate, 3),
         avg_score=round(avg_score, 3),
     )
@@ -76,8 +120,16 @@ async def _get_recruiter_stats() -> DelegateStats:
 
 @router.get("", response_model=list[DelegateInfo])
 async def list_delegates():
-    stats = await _get_recruiter_stats()
-    DELEGATE_REGISTRY[0].stats = stats
+    for d in DELEGATE_REGISTRY:
+        d.stats = await _get_delegate_stats(d.id)
+    # Mark paused delegates
+    runtime = get_runtime()
+    if runtime:
+        for d in DELEGATE_REGISTRY:
+            if runtime.is_paused(d.id):
+                d.status = "paused"
+            elif d.status == "paused":
+                d.status = "active"
     return DELEGATE_REGISTRY
 
 
@@ -85,8 +137,10 @@ async def list_delegates():
 async def get_delegate(delegate_id: str):
     for d in DELEGATE_REGISTRY:
         if d.id == delegate_id:
-            if delegate_id == "recruiter":
-                d.stats = await _get_recruiter_stats()
+            d.stats = await _get_delegate_stats(delegate_id)
+            runtime = get_runtime()
+            if runtime and runtime.is_paused(delegate_id):
+                d.status = "paused"
             return d
     raise HTTPException(404, "Delegate not found")
 

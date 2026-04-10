@@ -1,0 +1,30 @@
+version: 1
+delegate_id: shopping
+
+risk_boundary:
+  max_financial_commitment: 0.0    # Shopping never auto-purchases
+  max_calendar_commitment_hours: 0.0
+  max_autonomy_score: 0.20        # Ultra-conservative — purchases always need approval
+
+thresholds:
+  min_score_for_engagement: 0.60
+  auto_decline_below: 0.10
+  auto_decline_threshold: 0.05
+
+allowed_actions:
+  - action: purchase_recommendation
+    action_label: "Purchase recommendation"
+    auto_approve: false
+    zone: review
+  - action: track_price
+    action_label: "Track item price"
+    auto_approve: true
+    zone: auto
+  - action: alert_price_drop
+    action_label: "Alert on price drop"
+    auto_approve: true
+    zone: auto
+  - action: remove_watch
+    action_label: "Remove from watch list"
+    auto_approve: false
+    zone: review

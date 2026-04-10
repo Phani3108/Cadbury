@@ -139,3 +139,134 @@ async def generate_digest(
     )
 
     return report
+
+
+async def generate_cross_delegate_digest(period: str = "daily") -> DigestReport:
+    """
+    Generate a unified digest combining ALL active delegates.
+    Includes: Recruiter, Calendar, Comms, Finance, Shopping, Learning, Health.
+    """
+    from memory.graph import (
+        list_opportunities, list_approvals, list_events, list_decisions,
+        list_comms_messages, list_transactions, list_subscriptions,
+        list_watch_items, list_learning_paths, list_health_routines,
+        list_health_appointments, list_calendar_events,
+    )
+
+    report = DigestReport(period=period)
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=24) if period == "daily" else now - timedelta(days=7)
+
+    try:
+        # Recruiter
+        opps = await list_opportunities(500)
+        period_opps = [o for o in opps if o.created_at >= cutoff]
+        scored = [o for o in period_opps if o.match_score > 0]
+        highest = max(scored, key=lambda o: o.match_score, default=None)
+
+        # All approvals / decisions
+        all_approvals = await list_approvals()
+        pending = [a for a in all_approvals if a.status == "pending"]
+        all_events = await list_events(limit=500)
+        period_events = [e for e in all_events if e.timestamp >= cutoff]
+        all_decisions = await list_decisions(limit=500)
+        period_decisions = [d for d in all_decisions if d.timestamp >= cutoff]
+
+        # Calendar
+        cal_events = await list_calendar_events(limit=50)
+        upcoming = [c for c in cal_events if c.status in ("proposed", "confirmed")]
+
+        # Comms
+        messages = await list_comms_messages(limit=200)
+        period_msgs = [m for m in messages if m.created_at >= cutoff]
+        spam_archived = sum(1 for m in period_msgs if m.action_taken == "archived")
+        urgent_msgs = sum(1 for m in period_msgs if m.priority == "urgent")
+
+        # Finance
+        txs = await list_transactions(limit=200)
+        period_txs = [t for t in txs if t.date >= cutoff]
+        total_spent = sum(t.amount for t in period_txs if t.amount > 0)
+        subs = await list_subscriptions(status="active")
+
+        # Shopping
+        watch_items = await list_watch_items(status="watching")
+
+        # Learning
+        paths = await list_learning_paths()
+
+        # Health
+        routines = await list_health_routines(active_only=True)
+        appointments = await list_health_appointments(status="scheduled")
+    except Exception as exc:
+        logger.error("Cross-delegate digest error: %s", exc)
+        report.summary = f"Error generating digest: {exc}"
+        return report
+
+    # Build highlights per delegate
+    highlights: list[str] = []
+
+    # Recruiter section
+    if scored:
+        highlights.append(f"📧 Recruiter: {len(scored)} opportunities scored")
+        if highest:
+            highlights.append(f"   Best match: {highest.company} ({highest.match_score:.0%})")
+
+    # Calendar section
+    if upcoming:
+        highlights.append(f"📅 Calendar: {len(upcoming)} upcoming events")
+
+    # Comms section
+    if period_msgs:
+        highlights.append(f"💬 Comms: {len(period_msgs)} messages triaged, {spam_archived} archived, {urgent_msgs} urgent")
+
+    # Finance section
+    if period_txs:
+        highlights.append(f"💰 Finance: ${total_spent:.2f} spent, {len(subs)} active subscriptions")
+
+    # Shopping
+    if watch_items:
+        highlights.append(f"🛒 Shopping: {len(watch_items)} items being watched")
+
+    # Learning
+    if paths:
+        avg_progress = sum(p.progress_pct for p in paths) / len(paths) if paths else 0
+        highlights.append(f"📚 Learning: {len(paths)} paths, {avg_progress:.0f}% avg progress")
+
+    # Health
+    if routines or appointments:
+        highlights.append(f"🏥 Health: {len(routines)} active routines, {len(appointments)} upcoming appointments")
+
+    if not highlights:
+        highlights.append("No activity across any delegates")
+
+    report.highlights = highlights
+
+    # Action items (pending approvals across all delegates)
+    report.action_items = [
+        f"[{a.delegate_id}] {a.action_label}: {a.context_summary}"
+        for a in pending[:10]
+    ]
+
+    # Stats
+    time_saved = len(period_decisions) * 5.0
+    report.stats = {
+        "total_events": len(period_events),
+        "pending_approvals": len(pending),
+        "time_saved_minutes": time_saved,
+        "opportunities_scored": len(scored),
+        "messages_triaged": len(period_msgs),
+        "amount_spent": round(total_spent, 2),
+        "active_subscriptions": len(subs),
+        "active_routines": len(routines),
+    }
+
+    period_label = "24 hours" if period == "daily" else "7 days"
+    summary_parts = [f"Cross-delegate digest for the last {period_label}:"]
+    summary_parts.extend(f"  {h}" for h in highlights)
+    if pending:
+        summary_parts.append(f"\n  ⚠️ {len(pending)} action(s) need your attention")
+    if time_saved > 0:
+        summary_parts.append(f"  ⏱️ ~{time_saved:.0f} minutes saved through automation")
+    report.summary = "\n".join(summary_parts)
+
+    return report

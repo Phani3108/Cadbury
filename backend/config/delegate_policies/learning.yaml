@@ -1,0 +1,30 @@
+version: 1
+delegate_id: learning
+
+risk_boundary:
+  max_financial_commitment: 0.0
+  max_calendar_commitment_hours: 2.0   # Can suggest learning time blocks
+  max_autonomy_score: 0.50
+
+thresholds:
+  min_score_for_engagement: 0.40
+  auto_decline_below: 0.10
+  auto_decline_threshold: 0.05
+
+allowed_actions:
+  - action: create_path
+    action_label: "Create learning path"
+    auto_approve: true
+    zone: auto
+  - action: send_nudge
+    action_label: "Send learning nudge"
+    auto_approve: true
+    zone: auto
+  - action: suggest_resource
+    action_label: "Suggest learning resource"
+    auto_approve: true
+    zone: auto
+  - action: enroll_course
+    action_label: "Enroll in course"
+    auto_approve: false
+    zone: review

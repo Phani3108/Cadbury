@@ -1,0 +1,30 @@
+version: 1
+delegate_id: comms
+
+risk_boundary:
+  max_financial_commitment: 0.0
+  max_calendar_commitment_hours: 0.0
+  max_autonomy_score: 0.40
+
+thresholds:
+  min_score_for_engagement: 0.50
+  auto_decline_below: 0.10
+  auto_decline_threshold: 0.05
+
+allowed_actions:
+  - action: send_reply
+    action_label: "Send reply to message"
+    auto_approve: false
+    zone: review
+  - action: archive_spam
+    action_label: "Auto-archive spam"
+    auto_approve: true
+    zone: auto
+  - action: batch_digest
+    action_label: "Batch for digest"
+    auto_approve: true
+    zone: auto
+  - action: escalate
+    action_label: "Escalate to human"
+    auto_approve: false
+    zone: review

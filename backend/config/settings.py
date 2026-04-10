@@ -48,6 +48,21 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
 
+    # WhatsApp Business API
+    whatsapp_access_token: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_default_to: str = ""
+
+    # Slack
+    slack_bot_token: str = ""
+    slack_default_channel: str = ""
+
+    # Twilio SMS
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_from_number: str = ""
+    sms_default_to: str = ""
+
     # CORS
     frontend_url: str = "http://localhost:3000"
 

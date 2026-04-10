@@ -1,6 +1,6 @@
 // ─── Delegates ────────────────────────────────────────────────────────────────
 
-export type DelegateId = "recruiter" | "calendar" | "finance" | "comms" | "travel" | "shopping";
+export type DelegateId = "recruiter" | "calendar" | "comms" | "finance" | "shopping" | "learning" | "health";
 
 export type DelegateStatus = "active" | "paused" | "error" | "setup_required";
 
@@ -35,6 +35,27 @@ export type EventType =
   | "calendar_preblock_requested"
   | "calendar_slots_found"
   | "calendar_proposed"
+  | "message_received"
+  | "message_classified"
+  | "message_routed"
+  | "message_drafted"
+  | "message_sent"
+  | "message_archived"
+  | "transaction_ingested"
+  | "recurring_detected"
+  | "spending_alert"
+  | "subscription_flagged"
+  | "price_tracked"
+  | "price_drop"
+  | "deal_found"
+  | "skill_assessed"
+  | "learning_path_created"
+  | "learning_progress"
+  | "learning_nudge"
+  | "health_reminder"
+  | "health_appointment"
+  | "health_routine_logged"
+  | "health_alert"
   | "policy_blocked"
   | "notification_created"
   | "error";
@@ -291,4 +312,124 @@ export interface SSEMessage {
   type: string;
   data: unknown;
   timestamp: string;
+}
+
+// ─── Comms ────────────────────────────────────────────────────────────────────
+
+export type MessageChannel = "email" | "telegram" | "whatsapp" | "slack" | "sms";
+export type MessagePriority = "urgent" | "high" | "normal" | "low" | "spam";
+
+export interface CommsMessage {
+  message_id: string;
+  channel: MessageChannel;
+  sender: string;
+  sender_name: string;
+  subject: string;
+  body: string;
+  priority: MessagePriority;
+  category: string;
+  reply_draft: string | null;
+  action_taken: string;
+  created_at: string;
+}
+
+// ─── Finance ──────────────────────────────────────────────────────────────────
+
+export interface FinanceTransaction {
+  transaction_id: string;
+  amount: number;
+  currency: string;
+  merchant: string;
+  category: string;
+  date: string;
+  is_recurring: boolean;
+  notes: string;
+}
+
+export interface FinanceSubscription {
+  subscription_id: string;
+  merchant: string;
+  amount: number;
+  currency: string;
+  period_days: number;
+  status: string;
+  usage_rating: string;
+  created_at: string;
+}
+
+// ─── Shopping ─────────────────────────────────────────────────────────────────
+
+export interface WatchItem {
+  item_id: string;
+  name: string;
+  target_price: number | null;
+  current_price: number | null;
+  url: string;
+  retailer: string;
+  price_history: { date: string; price: number }[];
+  alert_on_drop: boolean;
+  status: string;
+  created_at: string;
+}
+
+// ─── Learning ─────────────────────────────────────────────────────────────────
+
+export interface SkillGap {
+  skill: string;
+  current_level: string;
+  target_level: string;
+  priority: string;
+  related_roles: string[];
+}
+
+export interface LearningPath {
+  path_id: string;
+  title: string;
+  skill_gaps: SkillGap[];
+  resources: { title: string; url: string; type: string; completed: boolean }[];
+  progress_pct: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// ─── Health ───────────────────────────────────────────────────────────────────
+
+export interface HealthRoutine {
+  routine_id: string;
+  name: string;
+  routine_type: string;
+  frequency: string;
+  time_of_day: string;
+  last_logged: string | null;
+  streak_days: number;
+  active: boolean;
+  created_at: string;
+}
+
+export interface HealthAppointment {
+  appointment_id: string;
+  title: string;
+  provider: string;
+  appointment_type: string;
+  scheduled_at: string | null;
+  status: string;
+  notes: string;
+  created_at: string;
+}
+
+// ─── Observability ────────────────────────────────────────────────────────────
+
+export interface SystemHealth {
+  status: string;
+  timestamp: string;
+  pending_approvals: number;
+  events_24h: number;
+  errors_24h: number;
+  delegates: Record<string, {
+    status: string;
+    runs_24h: number;
+    errors_24h: number;
+    avg_duration_s: number;
+    error_rate: number;
+  }>;
 }
