@@ -21,6 +21,7 @@ from memory.models import (
     MessageCategory,
 )
 from runtime.event_bus import publish_event
+from runtime.tracker import tracked_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,7 @@ class CommsPipeline:
         self.event_bus = event_bus
         self.llm_enabled = llm_enabled
 
+    @tracked_pipeline("comms")
     async def run(self, incoming_messages: list[CommsMessage]) -> CommsContext:
         ctx = CommsContext()
         try:

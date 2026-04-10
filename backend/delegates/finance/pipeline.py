@@ -31,6 +31,7 @@ from memory.models import (
     TransactionCategory,
 )
 from runtime.event_bus import publish_event
+from runtime.tracker import tracked_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +111,7 @@ class FinancePipeline:
         self.event_bus = event_bus
         self.llm_enabled = llm_enabled
 
+    @tracked_pipeline("finance")
     async def run(self, new_transactions: list[Transaction] | None = None) -> FinanceContext:
         ctx = FinanceContext()
         try:

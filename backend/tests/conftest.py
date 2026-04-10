@@ -1,6 +1,22 @@
 """Shared pytest fixtures."""
+import asyncio
+import os
 import pytest
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 from memory.models import CareerGoals, JobOpportunity, RemotePolicy, WorkStyle
+
+# Use in-memory SQLite for tests
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+
+
+@pytest_asyncio.fixture
+async def client():
+    """Async HTTP client pointed at the FastAPI app (in-memory DB)."""
+    from main import app
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
 
 
 @pytest.fixture

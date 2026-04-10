@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config.settings import settings
 from memory.graph import init_db
+from db import dispose_engine
 from middleware.auth import require_auth
 from policy.allowlist import init_allowlist
 from skills.auth.token_store import init_token_store
@@ -19,17 +20,30 @@ from policy.budget import init_budget_store
 from runtime.kernel import DelegateRuntime, set_runtime
 
 
+def _run_migrations():
+    """Run Alembic migrations programmatically (upgrade to head)."""
+    from alembic.config import Config
+    from alembic import command
+    from pathlib import Path
+
+    cfg = Config(str(Path(__file__).resolve().parent / "alembic.ini"))
+    cfg.set_main_option("script_location", str(Path(__file__).resolve().parent / "migrations"))
+    cfg.set_main_option("sqlalchemy.url", settings.database_url)
+    command.upgrade(cfg, "head")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await init_db()
+    _run_migrations()
+    await init_db()  # keep for any runtime init (WAL mode etc.)
     await init_allowlist()
     await init_token_store()
     await init_budget_store()
     runtime = DelegateRuntime()
     set_runtime(runtime)
     await runtime.start()
-    print("✓ Database initialized")
+    print("✓ Database migrated & initialized")
     print("✓ Allowlist loaded")
     print("✓ Delegate runtime started")
     if not settings.api_key:
@@ -37,6 +51,7 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     await runtime.stop()
+    await dispose_engine()
     print("✓ Runtime stopped")
 
 
@@ -76,6 +91,9 @@ from api.routes.shopping import router as shopping_router
 from api.routes.learning import router as learning_router
 from api.routes.health import router as health_router
 from api.routes.observability import router as observability_router
+from api.routes.pipeline_runs import router as pipeline_runs_router
+from api.routes.search import router as search_router
+from api.routes.chat import router as chat_router
 
 app.include_router(goals_router)
 app.include_router(approvals_router)
@@ -95,6 +113,9 @@ app.include_router(shopping_router)
 app.include_router(learning_router)
 app.include_router(health_router)
 app.include_router(observability_router)
+app.include_router(pipeline_runs_router)
+app.include_router(search_router)
+app.include_router(chat_router)
 
 
 @app.get("/health")

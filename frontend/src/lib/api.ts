@@ -334,6 +334,79 @@ export const auth = {
   loginUrl: (provider: string) => `${API_BASE}/v1/auth/${provider}/login`,
 };
 
+// ─── Pipeline Runs ────────────────────────────────────────────────────────────
+
+export interface PipelineRun {
+  id: string;
+  delegate_id: string;
+  trace_id: string;
+  status: "running" | "completed" | "failed";
+  stage: string | null;
+  error: string | null;
+  summary: string | null;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export const pipelineRuns = {
+  list: (delegateId?: string, status?: string, limit = 50) => {
+    const qs = new URLSearchParams();
+    if (delegateId) qs.set("delegate_id", delegateId);
+    if (status) qs.set("status", status);
+    qs.set("limit", String(limit));
+    return request<PipelineRun[]>(`/v1/pipeline-runs?${qs}`);
+  },
+  get: (id: string) => request<PipelineRun>(`/v1/pipeline-runs/${id}`),
+};
+
+// ─── Search ───────────────────────────────────────────────────────────────────
+
+export interface SearchResult {
+  type: string;
+  data: Record<string, unknown>;
+}
+
+export const search = {
+  query: (q: string, limit = 20) =>
+    request<SearchResult[]>(`/v1/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+};
+
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+
+export interface ChatSession {
+  id: string;
+  delegate_id: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  session_id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+}
+
+export const chat = {
+  sessions: (delegateId?: string, limit = 50) => {
+    const qs = new URLSearchParams();
+    if (delegateId) qs.set("delegate_id", delegateId);
+    qs.set("limit", String(limit));
+    return request<ChatSession[]>(`/v1/chat/sessions?${qs}`);
+  },
+  createSession: (delegateId: string) =>
+    request<ChatSession>(`/v1/chat/sessions?delegate_id=${delegateId}`, { method: "POST" }),
+  messages: (sessionId: string, limit = 200) =>
+    request<ChatMessage[]>(`/v1/chat/sessions/${sessionId}/messages?limit=${limit}`),
+  send: (sessionId: string, content: string) =>
+    request<{ user_message: ChatMessage; assistant_message: ChatMessage }>(
+      `/v1/chat/sessions/${sessionId}/messages`,
+      { method: "POST", body: JSON.stringify({ content }) },
+    ),
+};
+
 // ─── Bundled export ───────────────────────────────────────────────────────────
 
 export const api = {
@@ -356,4 +429,7 @@ export const api = {
   learningPaths,
   health,
   observability,
+  pipelineRuns,
+  search,
+  chat,
 };

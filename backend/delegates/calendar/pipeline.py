@@ -11,6 +11,7 @@ from memory.models import (
     DelegateEvent,
     EventType,
 )
+from runtime.tracker import tracked_pipeline
 from skills.calendar.provider import CalendarProvider
 from delegates.calendar.conflict_checker import find_available_slots
 
@@ -72,6 +73,7 @@ class CalendarPipeline:
         self.graph = graph
         self.event_bus = event_bus
 
+    @tracked_pipeline("calendar")
     async def run(self, request: CalendarRequest) -> CalendarContext:
         """Execute all 4 pipeline stages and return the completed context."""
         ctx = CalendarContext()

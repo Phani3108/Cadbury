@@ -7,6 +7,7 @@ import { StatusPill } from "@/components/shared/status-pill";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PipelineVisualizer } from "@/components/delegates/pipeline-visualizer";
 import { LearningPanel } from "@/components/delegates/learning-panel";
+import { DelegateChat } from "@/components/delegates/delegate-chat";
 import { Timeline } from "@/components/timeline/timeline";
 import { delegates as delegatesApi, events as eventsApi } from "@/lib/api";
 import type { Delegate, DelegateEvent, EventType } from "@/lib/types";
@@ -195,6 +196,9 @@ export default function DelegateDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Embedded chat per delegate (B5) */}
+      <DelegateChat delegateId={delegateId} delegateLabel={delegateName} />
     </div>
   );
 }

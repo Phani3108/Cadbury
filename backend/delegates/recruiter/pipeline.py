@@ -24,6 +24,7 @@ from memory.models import (
     RecruiterContact,
     RemotePolicy,
 )
+from runtime.tracker import tracked_pipeline
 from skills.email.provider import EmailProvider, RawEmail
 
 if TYPE_CHECKING:
@@ -69,6 +70,7 @@ class RecruiterPipeline:
         self.event_bus = event_bus
         self.llm_enabled = llm_enabled
 
+    @tracked_pipeline("recruiter")
     async def run(self) -> PipelineContext:
         """Execute all pipeline stages, return the completed context."""
         ctx = PipelineContext()

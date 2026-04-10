@@ -1,9 +1,9 @@
 import asyncio
 import json
-from fastapi import APIRouter
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from memory.graph import list_events
-from runtime.event_bus import subscribe
+from runtime.event_bus import subscribe, add_ws_client, remove_ws_client
 
 router = APIRouter(prefix="/v1/events", tags=["events"])
 
@@ -56,3 +56,22 @@ async def stream_events(delegate_id: str | None = None):
             "Connection": "keep-alive",
         },
     )
+
+
+@router.websocket("/ws")
+async def websocket_events(websocket: WebSocket):
+    """WebSocket endpoint — real-time delegate events."""
+    await websocket.accept()
+    token = add_ws_client(websocket)
+    try:
+        await websocket.send_json({"type": "connected", "data": {}})
+        while True:
+            # Keep connection alive; client can send pings or commands
+            data = await websocket.receive_text()
+            # Echo back as acknowledgement
+            if data == "ping":
+                await websocket.send_json({"type": "pong", "data": {}})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        remove_ws_client(token)

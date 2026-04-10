@@ -18,6 +18,7 @@ from memory.models import (
     ApprovalItem,
 )
 from runtime.event_bus import publish_event
+from runtime.tracker import tracked_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ class ShoppingPipeline:
         self.event_bus = event_bus
         self.llm_enabled = llm_enabled
 
+    @tracked_pipeline("shopping")
     async def run(self, price_updates: dict[str, float] | None = None) -> ShoppingContext:
         """
         Run the shopping pipeline.

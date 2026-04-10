@@ -244,6 +244,8 @@ export type NotificationType =
   | "digest_ready"
   | "threshold_crossed";
 
+export type NotificationSeverity = "action_required" | "attention" | "info";
+
 export interface Notification {
   notification_id: string;
   type: NotificationType;
@@ -251,6 +253,9 @@ export interface Notification {
   body: string;
   link: string;
   read: boolean;
+  severity: NotificationSeverity;
+  archived: boolean;
+  source_delegate_id?: string;
   created_at: string;
 }
 

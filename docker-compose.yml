@@ -1,6 +1,22 @@
 version: "3.9"
 
 services:
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: cadbury
+      POSTGRES_PASSWORD: cadbury
+      POSTGRES_DB: delegates
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cadbury -d delegates"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -9,12 +25,15 @@ services:
       - "8000:8000"
     environment:
       - APP_ENV=development
-      - DATABASE_URL=sqlite+aiosqlite:///./data/delegates.db
+      - DATABASE_URL=postgresql+asyncpg://cadbury:cadbury@postgres:5432/delegates
     env_file:
       - ./backend/.env
     volumes:
       - ./backend:/app
       - backend_data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -47,4 +66,5 @@ services:
     command: npm run dev
 
 volumes:
+  pgdata:
   backend_data:

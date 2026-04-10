@@ -1051,3 +1051,131 @@ async def get_scratchpad_titles_text() -> str:
         return ""
     lines = [f"- [{t['entry_id']}] {t['title']}" for t in titles]
     return "## Available Scratchpad Topics (ask to load details)\n" + "\n".join(lines)
+
+
+# ─── Pipeline Runs (A3) ──────────────────────────────────────────────────────
+
+async def create_pipeline_run(
+    run_id: str, delegate_id: str, trace_id: str
+) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    async with db() as conn:
+        await conn.execute(
+            """INSERT INTO pipeline_runs(id, delegate_id, trace_id, status, started_at)
+               VALUES (?, ?, ?, 'running', ?)""",
+            (run_id, delegate_id, trace_id, now),
+        )
+        await conn.commit()
+    return {"id": run_id, "delegate_id": delegate_id, "trace_id": trace_id, "status": "running", "started_at": now}
+
+
+async def update_pipeline_run(
+    run_id: str,
+    *,
+    status: str | None = None,
+    stage: str | None = None,
+    error: str | None = None,
+    summary: str | None = None,
+) -> dict | None:
+    updates, params = [], []
+    if status:
+        updates.append("status = ?"); params.append(status)
+    if stage is not None:
+        updates.append("stage = ?"); params.append(stage)
+    if error is not None:
+        updates.append("error = ?"); params.append(error)
+    if summary is not None:
+        updates.append("summary = ?"); params.append(summary)
+    if status in ("completed", "failed"):
+        updates.append("completed_at = ?"); params.append(datetime.now(timezone.utc).isoformat())
+    if not updates:
+        return None
+    params.append(run_id)
+    async with db() as conn:
+        await conn.execute(
+            f"UPDATE pipeline_runs SET {', '.join(updates)} WHERE id = ?",
+            params,
+        )
+        await conn.commit()
+        rows = await conn.execute_fetchall(
+            "SELECT * FROM pipeline_runs WHERE id = ?", (run_id,)
+        )
+        return dict(rows[0]) if rows else None
+
+
+async def get_pipeline_run(run_id: str) -> dict | None:
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            "SELECT * FROM pipeline_runs WHERE id = ?", (run_id,)
+        )
+        return dict(rows[0]) if rows else None
+
+
+async def list_pipeline_runs(
+    delegate_id: str | None = None,
+    status: str | None = None,
+    limit: int = 50,
+) -> list[dict]:
+    clauses, params = [], []
+    if delegate_id:
+        clauses.append("delegate_id = ?"); params.append(delegate_id)
+    if status:
+        clauses.append("status = ?"); params.append(status)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    params.append(limit)
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            f"SELECT * FROM pipeline_runs {where} ORDER BY started_at DESC LIMIT ?",
+            params,
+        )
+        return [dict(r) for r in rows]
+
+
+# ─── Chat Sessions & Messages (B5) ───────────────────────────────────────────
+
+async def create_chat_session(session_id: str, delegate_id: str) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    async with db() as conn:
+        await conn.execute(
+            "INSERT INTO chat_sessions(id, delegate_id, status, created_at, updated_at) VALUES(?,?,?,?,?)",
+            (session_id, delegate_id, "active", now, now),
+        )
+        await conn.commit()
+    return {"id": session_id, "delegate_id": delegate_id, "status": "active", "created_at": now}
+
+
+async def list_chat_sessions(delegate_id: str | None = None, limit: int = 50) -> list[dict]:
+    async with db() as conn:
+        if delegate_id:
+            rows = await conn.execute_fetchall(
+                "SELECT * FROM chat_sessions WHERE delegate_id = ? ORDER BY updated_at DESC LIMIT ?",
+                (delegate_id, limit),
+            )
+        else:
+            rows = await conn.execute_fetchall(
+                "SELECT * FROM chat_sessions ORDER BY updated_at DESC LIMIT ?", (limit,)
+            )
+        return [dict(r) for r in rows]
+
+
+async def add_chat_message(msg_id: str, session_id: str, role: str, content: str) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    async with db() as conn:
+        await conn.execute(
+            "INSERT INTO chat_messages(id, session_id, role, content, created_at) VALUES(?,?,?,?,?)",
+            (msg_id, session_id, role, content, now),
+        )
+        await conn.execute(
+            "UPDATE chat_sessions SET updated_at = ? WHERE id = ?", (now, session_id)
+        )
+        await conn.commit()
+    return {"id": msg_id, "session_id": session_id, "role": role, "content": content, "created_at": now}
+
+
+async def list_chat_messages(session_id: str, limit: int = 200) -> list[dict]:
+    async with db() as conn:
+        rows = await conn.execute_fetchall(
+            "SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC LIMIT ?",
+            (session_id, limit),
+        )
+        return [dict(r) for r in rows]

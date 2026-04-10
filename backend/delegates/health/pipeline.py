@@ -28,6 +28,7 @@ from memory.models import (
     DecisionLog,
 )
 from runtime.event_bus import publish_event
+from runtime.tracker import tracked_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ class HealthPipeline:
         self.event_bus = event_bus
         self.llm_enabled = llm_enabled
 
+    @tracked_pipeline("health")
     async def run(self) -> HealthContext:
         ctx = HealthContext()
         try:
