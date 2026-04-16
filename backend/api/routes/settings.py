@@ -169,6 +169,27 @@ INTEGRATIONS = [
         "required": False,
         "category": "general",
     },
+    {
+        "key": "groq_api_key",
+        "label": "Groq API Key",
+        "description": "Powers speech-to-text via Whisper-large-v3 for the voice chat interface. Get a free key at console.groq.com.",
+        "required": False,
+        "category": "voice",
+    },
+    {
+        "key": "elevenlabs_api_key",
+        "label": "ElevenLabs API Key",
+        "description": "Powers text-to-speech for spoken replies. Get your key at elevenlabs.io.",
+        "required": False,
+        "category": "voice",
+    },
+    {
+        "key": "elevenlabs_voice_id",
+        "label": "ElevenLabs Voice ID",
+        "description": "The voice identifier ElevenLabs uses when synthesizing replies. Default is the 'Rachel' voice.",
+        "required": False,
+        "category": "voice",
+    },
 ]
 
 

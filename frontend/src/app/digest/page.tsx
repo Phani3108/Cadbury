@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   FileText,
@@ -11,11 +11,13 @@ import {
   Timer,
   CheckCircle2,
   ArrowRight,
+  Volume2,
+  Loader2,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { cn } from "@/lib/utils";
-import { api } from "@/lib/api";
+import { api, voice as voiceApi } from "@/lib/api";
 import type { DigestReport } from "@/lib/types";
 
 function Skeleton({ className }: { className?: string }) {
@@ -28,6 +30,9 @@ export default function DigestPage() {
   const [period, setPeriod] = useState<Period>("daily");
   const [digest, setDigest] = useState<DigestReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [synthesizing, setSynthesizing] = useState(false);
+  const [ttsError, setTtsError] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -37,6 +42,28 @@ export default function DigestPage() {
       .catch(() => setDigest(null))
       .finally(() => setLoading(false));
   }, [period]);
+
+  const playDigest = async () => {
+    if (!digest || synthesizing) return;
+    const script = [digest.summary, ...(digest.highlights ?? []).slice(0, 4)].join(". ");
+    setSynthesizing(true);
+    setTtsError(null);
+    try {
+      const res = await voiceApi.synthesize(script);
+      if (!res.audio_url) {
+        setTtsError("TTS unavailable — add ELEVENLABS_API_KEY in Settings.");
+        return;
+      }
+      if (audioRef.current) {
+        audioRef.current.src = voiceApi.audioUrl(res.audio_url);
+        audioRef.current.play().catch(() => {});
+      }
+    } catch (e) {
+      setTtsError(e instanceof Error ? e.message : "TTS failed");
+    } finally {
+      setSynthesizing(false);
+    }
+  };
 
   const stats = digest?.stats ?? {};
 
@@ -90,24 +117,50 @@ export default function DigestPage() {
         title="Digest"
         subtitle="Summary of your delegate activity"
         actions={
-          <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
-            {(["daily", "weekly"] as Period[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
-                  period === p
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
-                )}
-              >
-                {p === "daily" ? "Daily" : "Weekly"}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={playDigest}
+              disabled={!digest || synthesizing}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
+                digest && !synthesizing
+                  ? "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+                  : "bg-slate-100 text-slate-300 cursor-not-allowed",
+              )}
+              title="Read digest aloud"
+            >
+              {synthesizing ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Volume2 className="w-3.5 h-3.5" />
+              )}
+              Listen
+            </button>
+            <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
+              {(["daily", "weekly"] as Period[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                    period === p
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  )}
+                >
+                  {p === "daily" ? "Daily" : "Weekly"}
+                </button>
+              ))}
+            </div>
           </div>
         }
       />
+      <audio ref={audioRef} autoPlay className="hidden" />
+      {ttsError && (
+        <div className="mb-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          {ttsError}
+        </div>
+      )}
 
       {/* Loading */}
       {loading && (

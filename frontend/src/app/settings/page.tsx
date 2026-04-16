@@ -19,6 +19,7 @@ import {
   ShieldAlert,
   AlertCircle,
   RefreshCw,
+  Mic,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const CATEGORIES: CategoryMeta[] = [
   { id: "ai", label: "AI Engine", icon: Brain, description: "Language model configuration for all AI-powered features" },
+  { id: "voice", label: "Voice", icon: Mic, description: "Speech-to-text and text-to-speech keys for the voice chat interface" },
   { id: "email", label: "Email Integration", icon: Mail, description: "Microsoft Graph connection for email and calendar access" },
   { id: "enrichment", label: "Company Enrichment", icon: Building2, description: "Third-party data providers for company and contact enrichment" },
   { id: "infrastructure", label: "Infrastructure", icon: Server, description: "Core infrastructure services and connections" },
@@ -76,6 +78,8 @@ const SECRET_KEYS = new Set([
   "msgraph_client_secret",
   "apollo_api_key",
   "redis_url",
+  "groq_api_key",
+  "elevenlabs_api_key",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -393,6 +397,25 @@ export default function SettingsPage() {
       />
 
       <div className="max-w-4xl space-y-6">
+        {/* ------ Quick links to admin sub-pages ------ */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {[
+            { href: "/admin/connections", label: "Connections", hint: "OAuth providers" },
+            { href: "/admin/budgets", label: "Budgets", hint: "Per-delegate limits" },
+            { href: "/admin/allowlist", label: "Allowlist", hint: "Trusted senders" },
+            { href: "/admin/health", label: "System Health", hint: "Live metrics" },
+          ].map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              className="bg-white border border-slate-200 rounded-lg px-3 py-2 hover:border-brand-300 hover:bg-brand-50/40 transition-colors"
+            >
+              <div className="text-sm font-medium text-slate-800">{link.label}</div>
+              <div className="text-[10px] text-slate-400">{link.hint}</div>
+            </a>
+          ))}
+        </div>
+
         {/* ------ Status banner ------ */}
         {!loading && !error && totalCount > 0 && (
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">

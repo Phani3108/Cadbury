@@ -14,6 +14,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Zap,
+  MessageSquare,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui-store";
@@ -37,10 +39,12 @@ export function Sidebar() {
   const navItems = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
     { href: "/approvals", label: "Approvals", icon: Inbox, badge: pendingCount },
+    { href: "/chat", label: "Chat", icon: MessageSquare },
     { href: "/goals", label: "Goals", icon: Target },
     { href: "/opportunities", label: "Opportunities", icon: Briefcase },
     { href: "/calendar", label: "Calendar", icon: Calendar },
     { href: "/digest", label: "Digest", icon: FileText },
+    { href: "/admin/health", label: "System Health", icon: Activity },
   ];
 
   return (

@@ -407,6 +407,73 @@ export const chat = {
     ),
 };
 
+// ─── Allowlist ────────────────────────────────────────────────────────────────
+
+export interface AllowlistRow {
+  identifier: string;
+  service: string;
+  added_at: string;
+  source: "env" | "user";
+}
+
+export const allowlist = {
+  list: () => request<AllowlistRow[]>("/v1/allowlist"),
+  add: (identifier: string, service = "email") =>
+    request<{ identifier: string; service: string; added: boolean }>("/v1/allowlist", {
+      method: "POST",
+      body: JSON.stringify({ identifier, service }),
+    }),
+  remove: (identifier: string) =>
+    request<{ identifier: string; removed: boolean }>(
+      `/v1/allowlist/${encodeURIComponent(identifier)}`,
+      { method: "DELETE" },
+    ),
+};
+
+// ─── Voice ────────────────────────────────────────────────────────────────────
+
+export interface VoiceTimings {
+  stt_ms: number | null;
+  workflow_ms: number | null;
+  tts_ms: number | null;
+  total_ms: number | null;
+}
+
+export interface VoiceChatResult {
+  request_id: string;
+  session_id: string;
+  transcript: string;
+  reply: string;
+  audio_url: string | null;
+  is_silence: boolean;
+  timings: VoiceTimings;
+}
+
+async function postMultipart<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { method: "POST", body: form });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`API ${res.status}: ${err}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export const voice = {
+  chat: (sessionId: string, audio: Blob, filename = "audio.webm") => {
+    const form = new FormData();
+    form.append("session_id", sessionId);
+    form.append("file", audio, filename);
+    return postMultipart<VoiceChatResult>("/v1/voice/chat", form);
+  },
+  synthesize: (text: string) =>
+    request<{ audio_url: string | null; tts_ms: number | null; cached: boolean; request_id: string }>(
+      "/v1/voice/synthesize",
+      { method: "POST", body: JSON.stringify({ text }) },
+    ),
+  audioUrl: (relative: string) =>
+    relative.startsWith("http") ? relative : `${API_BASE}${relative}`,
+};
+
 // ─── Bundled export ───────────────────────────────────────────────────────────
 
 export const api = {
@@ -432,4 +499,6 @@ export const api = {
   pipelineRuns,
   search,
   chat,
+  allowlist,
+  voice,
 };

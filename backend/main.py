@@ -94,6 +94,8 @@ from api.routes.observability import router as observability_router
 from api.routes.pipeline_runs import router as pipeline_runs_router
 from api.routes.search import router as search_router
 from api.routes.chat import router as chat_router
+from api.routes.allowlist import router as allowlist_router
+from api.routes.voice import router as voice_router
 
 app.include_router(goals_router)
 app.include_router(approvals_router)
@@ -116,6 +118,8 @@ app.include_router(observability_router)
 app.include_router(pipeline_runs_router)
 app.include_router(search_router)
 app.include_router(chat_router)
+app.include_router(allowlist_router)
+app.include_router(voice_router)
 
 
 @app.get("/health")

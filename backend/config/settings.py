@@ -69,6 +69,13 @@ class Settings(BaseSettings):
     # Allowlist — comma-separated emails/identifiers permitted to trigger actions
     allowlist: str = ""
 
+    # Voice — STT via Groq Whisper, TTS via ElevenLabs
+    groq_api_key: str = ""
+    elevenlabs_api_key: str = ""
+    elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"  # "Rachel" by default
+    tts_cache_ttl_seconds: int = 86_400
+    stt_max_audio_mb: int = 25
+
 
 settings = Settings()
 
