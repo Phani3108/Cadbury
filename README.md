@@ -39,7 +39,7 @@ A **per-delegate chat interface** with optional voice — accessible at `/chat`.
 
 - Text + voice in the same thread, switch freely
 - Voice pipeline: **Groq Whisper** STT → delegate-aware LLM → **ElevenLabs** TTS, cached
-- Rose-inspired VAD (asymmetric thresholds, frame hysteresis, 30s max capture)
+- VAD (asymmetric thresholds, frame hysteresis, 30s max capture)
 - Circuit breakers on Groq + ElevenLabs — graceful fallback to text if TTS is unavailable
 - `Ctrl+Shift+D` toggles a dev panel showing per-stage latency: `STT / LLM / TTS / total`
 - The LLM injects your career goals + recent memories + a delegate persona prompt
@@ -330,7 +330,7 @@ This is not a chat interface. The moat compounds over time.
 - **Pattern learning** — 5 detectors mine decision history into one-click-applicable suggestions
 - **Budgets** — hard daily ceilings with auto-pause on breach
 - **Cross-delegate coordination** — e.g. recruiter high-match → calendar pre-block, finance subscription flag → comms draft cancellation
-- **Voice interface** — Rose-inspired STT/TTS pipeline with per-stage latency transparency
+- **Voice interface** — STT/TTS pipeline with per-stage latency transparency
 - **Deterministic scoring** — 5-factor weighted scorecards instead of opaque LLM judgments
 
 ---
@@ -443,4 +443,4 @@ Integration credentials can also be saved + tested live in Settings → AI Engin
 
 ## 🙏 Credits
 
-Voice architecture patterns (fire-and-forget extraction, asymmetric-threshold VAD, circuit breakers, per-stage `PipelineTimings`) adapted from [Alexi5000/Rose](https://github.com/Alexi5000/Rose), a voice-first wellness companion. Cadbury applies the same latency-minded pipeline design to a multi-delegate governance system.
+Voice architecture patterns (fire-and-forget extraction, asymmetric-threshold VAD, circuit breakers, per-stage `PipelineTimings`) a voice-first companion. Cadbury applies the same latency-minded pipeline design to a multi-delegate governance system.
