@@ -1,6 +1,6 @@
 # 🧠 Cadbury — Personal Delegates Network
 
-A consumer-facing AI layer where specialized delegates handle distinct slices of your life — with strict boundaries on what they can decide, act on, and spend. Now with **voice chat** (Rose-inspired STT/TTS pipeline).
+A consumer-facing AI layer where specialized delegates handle distinct slices of your life — with strict boundaries on what they can decide, act on, and spend. Now with **voice chat** (STT/TTS pipeline).
 
 ---
 
